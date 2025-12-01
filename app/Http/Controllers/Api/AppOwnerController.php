@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
 use App\Models\AppOwnerUser;
+use App\Models\Item;
+use App\Models\Order;
 use App\Models\ShopImage;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Facades\Image;
@@ -37,11 +39,38 @@ class AppOwnerController extends Controller
         }
 
         $data = $validator->validated();
-        $data['password'] = Hash::make($data['password']);
-
         $owner = AppOwnerUser::create($data);
 
         return response()->json(['message' => 'Profile successfully', 'data' => $owner], 201);
+    }
+
+    public function login(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $credentials = $validator->validated();
+
+        $user = AppOwnerUser::where('email', $credentials['email'])->first();
+
+        if (! $user) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+        if (! Hash::check($credentials['password'], $user->password) && $user->password !== $credentials['password']) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+        $user->makeHidden('password');
+
+        return response()->json([
+            'message' => 'Login successful',
+            'data' => $user
+        ], 200);
     }
 
     public function update(Request $request, $id)
@@ -72,7 +101,8 @@ class AppOwnerController extends Controller
         $data = $validator->validated();
 
         if (isset($data['password'])) {
-            $data['password'] = Hash::make($data['password']);
+        //    $data['password'] = Hash::make($data['password']);
+            $data['password'] = $data['password'];
         }
 
         $owner->update($data);
@@ -213,4 +243,37 @@ class AppOwnerController extends Controller
             'data' => $shops
         ], 200);
     }
+
+ public function shopDashboard(Request $request)
+{
+    $shop_id = $request->shop_id; 
+
+    if (!$shop_id) {
+        return response()->json(['message' => 'shop_id required'], 400);
+    }
+
+    // Total items
+    $totalItems = Item::where('shop_id', $shop_id)->count();
+
+    // Total orders
+    $totalOrders = Order::where('shop_id', $shop_id)->count();
+
+    // Pending orders (adjust statuses as per your system)
+    $pendingOrders = Order::where('shop_id', $shop_id)
+                          ->where('status', 'pending')
+                          ->count();
+
+    // Total earning (only completed orders)
+    $totalEarnings = Order::where('shop_id', $shop_id)
+                          ->where('status', 'completed')
+                          ->sum('final_amount');
+
+    return response()->json([
+        'shop_id'        => $shop_id,
+        'total_items'    => $totalItems,
+        'total_orders'   => $totalOrders,
+        'pending_orders' => $pendingOrders,
+        'total_earning'  => $totalEarnings,
+    ], 200);
+}
 }

@@ -70,7 +70,9 @@ Route::post('/auth/update-profile', [AuthController::class, 'updateProfile']);
 //vendor api
 
 Route::post('/ownersignup', [AppOwnerController::class, 'store']);
+Route::post('/ownerlogin', [AppOwnerController::class, 'login']);
 Route::post('/ownerupdate/{id}', [AppOwnerController::class, 'update']);
+Route::get('/shopdashboard', [AppOwnerController::class, 'shopDashboard']);
 
 Route::post('/shop/upload-image', [AppOwnerController::class, 'uploadShopImage']);
 Route::post('/shop/delete-image/{id}', [AppOwnerController::class, 'deleteShopImage']);
@@ -81,6 +83,7 @@ Route::get('/nearby-shops', [AppOwnerController::class, 'nearbyShops']);
 //category
 
 Route::get('/get-categories', [ItemCategoryController::class, 'index']);
+Route::get('/get-app-home-filters', [ItemController::class, 'getAppHomeFilter']);
 
 
 //items

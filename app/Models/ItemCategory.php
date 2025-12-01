@@ -11,7 +11,10 @@ class ItemCategory extends Model
     protected $fillable = [
         'category_name',
         'description',
-        'status'
+        'status',
+        'image',
+        'category_type',
+        'is_featured'
     ];
 
     public function items()

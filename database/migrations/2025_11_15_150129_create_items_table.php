@@ -14,7 +14,7 @@ return new class extends Migration
     Schema::create('items', function (Blueprint $table) {
         $table->id();
 
-        $table->unsignedBigInteger('owner_id');   // shop_id
+        $table->unsignedBigInteger('shop_id');   // shop_id
         $table->unsignedBigInteger('category_id')->nullable();
 
         $table->string('item_name');
@@ -33,7 +33,7 @@ return new class extends Migration
         $table->timestamps();
 
         // Foreign Keys
-        $table->foreign('owner_id')->references('shop_id')->on('app_owner_shops')->onDelete('cascade');
+        $table->foreign('shop_id')->references('shop_id')->on('app_owner_shops')->onDelete('cascade');
         $table->foreign('category_id')->references('id')->on('item_categories')->onDelete('set null');
     });
 }

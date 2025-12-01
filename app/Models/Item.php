@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Item extends Model
 {
     protected $fillable = [
-        'owner_id','category_id','item_name','description','price',
+        'shop_id','category_id','item_name','description','price',
         'offer_price','min_quantity','weight_or_piece','status','images','gst_percent'
     ];
 
@@ -18,6 +18,6 @@ class Item extends Model
 
     public function owner()
     {
-        return $this->belongsTo(AppOwnerUser::class, 'owner_id', 'shop_id');
+        return $this->belongsTo(AppOwnerUser::class, 'shop_id', 'shop_id');
     }
 }

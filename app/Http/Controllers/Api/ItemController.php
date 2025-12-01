@@ -10,22 +10,23 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
 use App\Models\AppOwnerUser;
 use App\Models\ShopImage;
+use App\Models\AppHomeFilter;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Facades\Image;
 
 
 class ItemController extends Controller
 {
-    public function listByOwner($owner_id)
+    public function listByOwner($shop_id)
     {
-        $items = Item::with('category')->where('owner_id', $owner_id)->get();
+        $items = Item::with('category')->where('shop_id', $shop_id)->get();
         return response()->json(['data' => $items], 200);
     }
 
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'owner_id' => 'required|exists:app_owner_shops,owner_id',
+            'shop_id' => 'required|exists:app_owner_shops,shop_id',
             'category_id' => 'required|exists:item_categories,id',
             'item_name' => 'required|string|max:100',
             'description' => 'nullable|string',
@@ -72,7 +73,7 @@ class ItemController extends Controller
 
         // Validation
         $validator = Validator::make($request->all(), [
-            'owner_id'       => 'sometimes|required|integer',
+            'shop_id'       => 'sometimes|required|integer',
             'category_id'    => 'sometimes|required|integer',
             'item_name'      => 'sometimes|required|string|max:255',
             'description'    => 'sometimes|nullable|string',
@@ -91,7 +92,7 @@ class ItemController extends Controller
 
         // Update fields
         $data = $request->only([
-            'owner_id', 'category_id', 'item_name', 'description', 'price', 
+            'shop_id', 'category_id', 'item_name', 'description', 'price', 
             'offer_price', 'min_quantity', 'weight_or_piece', 'status'
         ]);
 
@@ -125,5 +126,10 @@ class ItemController extends Controller
         $item->save();
 
         return response()->json(['message' => 'Item status updated', 'status' => $item->status], 200);
+    }
+    public function getAppHomeFilter()
+    {
+        $filters = AppHomeFilter::get();
+        return response()->json(['data' => $filters], 200);
     }
 }
