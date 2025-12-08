@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
@@ -7,8 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 class Item extends Model
 {
     protected $fillable = [
-        'shop_id','category_id','item_name','description','price',
-        'offer_price','min_quantity','weight_or_piece','status','images','gst_percent'
+        'name', 'description', 'price', 'category_id', 'subcategory_id', /* etc */
     ];
 
     public function category()
@@ -16,7 +14,11 @@ class Item extends Model
         return $this->belongsTo(ItemCategory::class, 'category_id');
     }
 
-    public function owner()
+    public function subcategory()
+    {
+        return $this->belongsTo(ItemSubcategory::class, 'subcategory_id');
+    }
+        public function owner()
     {
         return $this->belongsTo(AppOwnerUser::class, 'shop_id', 'shop_id');
     }

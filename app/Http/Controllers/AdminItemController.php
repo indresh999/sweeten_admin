@@ -104,4 +104,11 @@ class AdminItemController extends Controller
         Item::findOrFail($id)->delete();
         return redirect()->route('items.index')->with('success','Item deleted successfully.');
     }
+
+    public function show($id)
+    {
+        $item = Item::with(['category', 'subcategory', 'owner'])->findOrFail($id);
+
+        return view('items.show', compact('item'));
+    }
 }
