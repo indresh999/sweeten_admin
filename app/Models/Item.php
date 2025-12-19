@@ -22,4 +22,28 @@ class Item extends Model
     {
         return $this->belongsTo(AppOwnerUser::class, 'shop_id', 'shop_id');
     }
+
+    public function itemsBySubcategory(Request $request)
+    {
+        $request->validate([
+            'subcategory_id' => 'required|exists:item_subcategories,id',
+            'shop_id' => 'nullable|exists:shops,shop_id', // optional
+        ]);
+
+        $subcategoryId = $request->subcategory_id;
+        $shopId = $request->shop_id;
+
+        $items = Item::with(['category', 'subcategory', 'owner'])
+            ->where('subcategory_id', $subcategoryId)
+            ->when($shopId, function ($query) use ($shopId) {
+                // ✅ Same shop items first
+                $query->orderByRaw("shop_id = ? DESC", [$shopId]);
+            })
+            ->orderBy('id', 'DESC') // fallback ordering
+            ->get();
+
+        return response()->json([
+            'data' => $items
+        ], 200);
+    }
 }

@@ -35,8 +35,7 @@ class CartController extends Controller
 
         $item = Item::findOrFail($request->item_id);
 
-        // Ensure item belongs to this owner
-        if ($item->owner_id != $request->owner_id) {
+        if ($item->shop_id != $request->owner_id) {
             return response()->json([
                 'message' => 'This item does not belong to this owner.'
             ], 400);

@@ -17,6 +17,8 @@ use App\Http\Controllers\DeliveryController;
 use App\Http\Controllers\DeliveryBoyAuthController;
 use App\Http\Controllers\DeliveryBoyProfileController;
 use App\Http\Controllers\DeliveryBoyDocumentController;
+use App\Http\Controllers\Api\ItemSubcategoryController;
+
 
 Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
@@ -84,6 +86,7 @@ Route::get('/nearby-shops', [AppOwnerController::class, 'nearbyShops']);
 
 Route::get('/get-categories', [ItemCategoryController::class, 'index']);
 Route::get('/get-app-home-filters', [ItemController::class, 'getAppHomeFilter']);
+Route::get('get-sub-categories', [ItemSubcategoryController::class, 'index']);
 
 
 //items
@@ -92,6 +95,8 @@ Route::post('/update-item/{id}', [ItemController::class, 'update']);
 Route::post('/delete-item/{id}', [ItemController::class, 'destroy']);
 Route::get('/all-items/{id}', [ItemController::class, 'listByOwner']);
 Route::post('/item-status/{id}', [ItemController::class, 'toggleStatus']);
+
+Route::get('/items-by-subcategory', [ItemController::class, 'itemsBySubcategory']);
 
 //orders
 Route::post('/orders/create', [OrderController::class, 'createOrder']);
@@ -120,6 +125,4 @@ Route::prefix('banners')->group(function () {
 
     Route::get('/active', [BannerController::class, 'listActiveBanners']);
     Route::get('/all', [BannerController::class, 'listAllBanners']);
-
-
 });
