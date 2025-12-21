@@ -10,11 +10,20 @@ use Illuminate\Http\Request;
 
 class AdminItemController extends Controller
 {
-    public function index()
-    {
-        $items = Item::with(['category','owner'])->orderBy('id','desc')->paginate(10);
-        return view('items.index', compact('items'));
-    }
+   public function index(Request $request)
+{
+    $owners = AppOwnerUser::orderBy('restaurant_name')->get();
+
+    $items = Item::with(['category', 'subcategory', 'owner'])
+        ->when($request->shop_id, function ($query) use ($request) {
+            $query->where('shop_id', $request->shop_id);
+        })
+        ->orderBy('id', 'desc')
+        ->paginate(10)
+        ->withQueryString(); // keep filter on pagination
+
+    return view('items.index', compact('items', 'owners'));
+}
 
     public function create()
     {

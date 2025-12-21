@@ -1,4 +1,11 @@
 <x-app-layout :assets="$assets ?? []">
+        <style>
+        table thead tr th {
+            text-transform: Capitalize;
+            letter-spacing: 0.2px;
+            background-color: #8fd893 !important;
+        }
+    </style>
 <div class="container py-4">
 
     <div class="d-flex justify-content-between mb-3">
@@ -12,6 +19,38 @@
 
     <div class="card">
         <div class="card-body">
+
+            <form method="GET"
+      action="{{ route('admin.items.index') }}"
+      class="row mb-3">
+
+    <div class="col-md-4">
+        <select name="shop_id"
+                class="form-select"
+                onchange="this.form.submit()">
+
+            <option value="">All Shops</option>
+
+            @foreach ($owners as $owner)
+                <option value="{{ $owner->shop_id }}"
+                    {{ request('shop_id') == $owner->shop_id ? 'selected' : '' }}>
+                    {{ $owner->restaurant_name }}
+                </option>
+            @endforeach
+
+        </select>
+    </div>
+
+    @if(request('shop_id'))
+        <div class="col-md-2">
+            <a href="{{ route('admin.items.index') }}"
+               class="btn btn-secondary">
+                Reset
+            </a>
+        </div>
+    @endif
+
+</form>
 
             <table class="table table-bordered align-middle">
                 <thead class="table-dark text-center">

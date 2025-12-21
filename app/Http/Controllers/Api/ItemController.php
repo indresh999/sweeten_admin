@@ -17,7 +17,7 @@ class ItemController extends Controller
     // ======================================================
     public function listByOwner($shop_id)
     {
-        $items = Item::with(['category', 'subcategory'])
+        $items = Item::with(['category', 'subcategory', 'owner'])
             ->where('shop_id', $shop_id)
             ->get();
 

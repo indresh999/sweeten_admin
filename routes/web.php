@@ -11,6 +11,7 @@ use App\Http\Controllers\AppUserController;
 use App\Http\Controllers\AdminOrderController;
 use App\Http\Controllers\DeliveryBoyAdminController;
 use App\Http\Controllers\AdminItemCategoryController;
+use App\Http\Controllers\AdminItemSubcategoryController;
 use App\Http\Controllers\AdminItemController;
 use Illuminate\Support\Facades\Artisan;
 // Packages
@@ -117,7 +118,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::resource('item-categories', \App\Http\Controllers\AdminItemCategoryController::class);
     Route::resource('items', \App\Http\Controllers\AdminItemController::class);
 
+    Route::resource(
+    'item-subcategories',
+    \App\Http\Controllers\AdminItemSubcategoryController::class)->names('item-subcategories');
+
 });
+
 
 
 //App Details Page => 'Dashboard'], function() {

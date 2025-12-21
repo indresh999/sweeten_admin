@@ -27,7 +27,7 @@ class ShopController extends Controller
 
         // Load shop items
         $items = \App\Models\Item::with(['category'])
-            ->where('owner_id', $id)
+            ->where('shop_id', $id)
             ->orderBy('id', 'desc')
             ->get();
 

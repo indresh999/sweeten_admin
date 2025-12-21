@@ -79,6 +79,18 @@
             </i>
         </a>
     </li>
+    <li class="nav-item mb-2">
+        <a class="nav-link {{ activeRoute('admin.item-subcategories.index') }}"
+            href="{{ route('admin.item-subcategories.index') }}">
+            <span class="item-name">Item Sub Categories</span>
+           <i class="right-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+            </i>
+        </a>
+    </li>
 
     <li class="nav-item mb-2">
         <a class="nav-link {{ activeRoute('admin.items.index') }}" href="{{ route('admin.items.index') }}">

@@ -2,8 +2,7 @@
 
     <div class="container py-4">
 
-        <!-- PAGE TITLE -->
-        <h2 class="mb-4 fw-bold">Shop Details</h2>
+       
 
         <div class="row">
             <!-- LEFT: SHOP DETAILS -->
@@ -28,15 +27,12 @@
                             </span>
                         </p>
 
-                        <a href="#" class="btn btn-primary w-100 mt-3">
-                            Edit Shop
-                        </a>
                     </div>
                 </div>
 
                 <!-- SHOP IMAGES LIST -->
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header bg-dark text-white">
+                    <div class="card-header">
                         <strong>Shop Images</strong>
                     </div>
                     <div class="card-body d-flex flex-wrap gap-2">
@@ -55,7 +51,7 @@
 
                 <!-- ORDERS SECTION -->
                 <div class="card shadow-sm mb-4">
-                    <div class="card-header bg-primary text-white d-flex justify-content-between">
+                    <div class="card-header text-white d-flex justify-content-between">
                         <h5 class="mb-0">Orders</h5>
                         <span class="badge bg-light text-dark">{{ count($orders) }} Total</span>
                     </div>
@@ -106,7 +102,7 @@
 
                 <!-- ITEMS SECTION -->
                 <div class="card shadow-sm">
-                    <div class="card-header bg-success text-white d-flex justify-content-between">
+                    <div class="card-header text-white d-flex justify-content-between">
                         <h5 class="mb-0">Items</h5>
                         <span class="badge bg-light text-dark">{{ count($items) }} Total</span>
                     </div>
