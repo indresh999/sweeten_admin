@@ -30,12 +30,37 @@
                             <option value="0">Inactive</option>
                         </select>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Category Type</label>
 
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="is_birthday" value="1"
+                                id="isBirthday">
+                            <label class="form-check-label" for="isBirthday">
+                                Birthday Category 🎂
+                            </label>
+                        </div>
+
+
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Featured</label>
+
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="is_featured" value="1"
+                                id="isFeatured">
+                            <label class="form-check-label" for="isFeatured">
+                                Make this category Featured ⭐
+                            </label>
+                        </div>
+                    </div>
                     <!-- Image Upload -->
                     <div class="mb-3">
                         <label>Category Image</label>
                         <input type="file" id="imageInput" name="image" class="form-control" accept="image/*">
                     </div>
+
 
                     <!-- Preview Box -->
                     <div class="mb-3">
@@ -87,8 +112,8 @@
             e.preventDefault();
 
             cropper.getCroppedCanvas({
-                width: 600,
-                height: 600,
+                width: 700,
+                height: 700,
                 imageSmoothingQuality: 'high',
             }).toBlob(blob => {
                 const fileInput = document.getElementById('imageInput');

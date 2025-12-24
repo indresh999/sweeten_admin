@@ -31,34 +31,37 @@ class AdminItemSubcategoryController extends Controller
         return view('item-subcategory.create', compact('categories'));
     }
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'category_id' => 'required|exists:item_categories,id',
-            'name'        => 'required|string|max:255',
-            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-        ]);
+  public function store(Request $request)
+{
+    $request->validate([
+        'category_id' => 'required|exists:item_categories,id',
+        'name'        => 'required|string|max:255',
+        'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+    ]);
 
-        $imagePath = null;
+    $imagePath = null;
 
-        if ($request->hasFile('image')) {
-            $filename = Str::uuid() . '.webp';
-            $path = $request->file('image')->storeAs('subcategories', $filename, 'public');
-            $imagePath = asset('storage/' . $path);
-        }
+    if ($request->hasFile('image')) {
+        $file = $request->file('image');
+        $filename = Str::uuid() . '.webp';
+        $path = $file->storeAs('subcategories', $filename, 'public');
 
-        ItemSubcategory::create([
-            'category_id' => $request->category_id,
-            'name'        => $request->name,
-            'description' => $request->description,
-            'status'      => $request->status ?? 1,
-            'image'       => $imagePath,
-        ]);
-
-        return redirect()
-            ->route('admin.item-subcategories.index')
-            ->with('success', 'Subcategory created successfully.');
+        // ✅ RELATIVE PATH ONLY (SAME AS CATEGORY)
+        $imagePath = 'storage/' . $path;
     }
+
+    ItemSubcategory::create([
+        'category_id' => $request->category_id,
+        'name'        => $request->name,
+        'description' => $request->description,
+        'status'      => $request->status ?? 1,
+        'image'       => $imagePath,
+    ]);
+
+    return redirect()
+        ->route('admin.item-subcategories.index')
+        ->with('success', 'Subcategory created successfully.');
+}
 
     public function edit($id)
     {
@@ -68,54 +71,65 @@ class AdminItemSubcategoryController extends Controller
         return view('item-subcategory.edit', compact('subcategory', 'categories'));
     }
 
-    public function update(Request $request, $id)
-    {
-        $request->validate([
-            'category_id' => 'required|exists:item_categories,id',
-            'name'        => 'required|string|max:255',
-            'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
-        ]);
+   public function update(Request $request, $id)
+{
+    $request->validate([
+        'category_id' => 'required|exists:item_categories,id',
+        'name'        => 'required|string|max:255',
+        'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+    ]);
 
-        $subcategory = ItemSubcategory::findOrFail($id);
-        $imagePath = $subcategory->image;
+    $subcategory = ItemSubcategory::findOrFail($id);
 
-        if ($request->hasFile('image')) {
-            if ($subcategory->image) {
-                $oldPath = str_replace(asset('storage') . '/', '', $subcategory->image);
-                Storage::disk('public')->delete($oldPath);
-            }
+    // ✅ RAW DB VALUE
+    $imagePath = $subcategory->getRawOriginal('image');
 
-            $filename = Str::uuid() . '.webp';
-            $path = $request->file('image')->storeAs('subcategories', $filename, 'public');
-            $imagePath = asset('storage/' . $path);
+    if ($request->hasFile('image')) {
+
+        // ✅ DELETE OLD IMAGE
+        if ($imagePath) {
+            Storage::disk('public')->delete(
+                str_replace('storage/', '', $imagePath)
+            );
         }
 
-        $subcategory->update([
-            'category_id' => $request->category_id,
-            'name'        => $request->name,
-            'description' => $request->description,
-            'status'      => $request->status ?? 1,
-            'image'       => $imagePath,
-        ]);
+        $file = $request->file('image');
+        $filename = Str::uuid() . '.webp';
+        $path = $file->storeAs('subcategories', $filename, 'public');
 
-        return redirect()
-            ->route('admin.item-subcategories.index')
-            ->with('success', 'Subcategory updated successfully.');
+        // ✅ SAVE RELATIVE PATH
+        $imagePath = 'storage/' . $path;
     }
 
-    public function destroy($id)
-    {
-        $subcategory = ItemSubcategory::findOrFail($id);
+    $subcategory->update([
+        'category_id' => $request->category_id,
+        'name'        => $request->name,
+        'description' => $request->description,
+        'status'      => $request->status ?? 1,
+        'image'       => $imagePath ?? $subcategory->image,
+    ]);
 
-        if ($subcategory->image) {
-            $path = str_replace(asset('storage') . '/', '', $subcategory->image);
-            Storage::disk('public')->delete($path);
-        }
+    return redirect()
+        ->route('admin.item-subcategories.index')
+        ->with('success', 'Subcategory updated successfully.');
+}
 
-        $subcategory->delete();
+   public function destroy($id)
+{
+    $subcategory = ItemSubcategory::findOrFail($id);
 
-        return redirect()
-            ->route('admin.item-subcategories.index')
-            ->with('success', 'Subcategory deleted successfully.');
+    $imagePath = $subcategory->getRawOriginal('image');
+
+    if ($imagePath) {
+        Storage::disk('public')->delete(
+            str_replace('storage/', '', $imagePath)
+        );
     }
+
+    $subcategory->delete();
+
+    return redirect()
+        ->route('admin.item-subcategories.index')
+        ->with('success', 'Subcategory deleted successfully.');
+}
 }

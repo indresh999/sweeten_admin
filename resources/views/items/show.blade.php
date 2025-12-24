@@ -4,15 +4,24 @@
 
     <div class="row">
         <div class="col-md-4">
-            @php $images = $item->images ? json_decode($item->images,true) : []; @endphp
-            @if($images)
-                @foreach($images as $img)
-                    <img src="{{ asset('uploads/items/'.$img) }}" class="img-fluid mb-2">
-                @endforeach
-            @else
-                <div class="border text-center p-4">No images</div>
-            @endif
+    @php
+        $images = $item->images ?? [];
+    @endphp
+
+    @if(count($images))
+        @foreach($images as $img)
+            <img
+                src="{{ asset($img) }}"
+                class="img-fluid mb-2 rounded border"
+                style="max-height:150px;object-fit:cover;"
+            >
+        @endforeach
+    @else
+        <div class="border text-center p-4 text-muted">
+            No images
         </div>
+    @endif
+</div>
 
         <div class="col-md-8">
             <p><strong>Category:</strong> {{ $item->category->category_name ?? '-' }}</p>

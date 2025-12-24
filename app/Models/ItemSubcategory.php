@@ -25,4 +25,9 @@ class ItemSubcategory extends Model
     {
         return $this->hasMany(Item::class, 'subcategory_id');
     }
+
+    public function getImageAttribute($value)
+    {
+        return $value ? asset($value) : null;
+    }
 }

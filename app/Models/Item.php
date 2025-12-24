@@ -1,49 +1,61 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class Item extends Model
 {
     protected $fillable = [
-        'name', 'description', 'price', 'category_id', 'subcategory_id', /* etc */
+        'shop_id',
+        'category_id',
+        'subcategory_id',
+        'item_name',
+        'description',
+        'price',
+        'offer_price',
+        'min_quantity',
+        'weight_or_piece',
+        'gst_percent',
+        'status',
+        'images',
     ];
+
+    protected $casts = [
+        'images' => 'array',
+    ];
+
+    // 👇 ADD THIS
+    protected $appends = ['image_urls'];
+
+    /**
+     * Return full image URLs
+     */
+   public function getImageUrlsAttribute()
+{
+    if (empty($this->images)) {
+        return [];
+    }
+
+    return collect($this->images)->map(function ($path) {
+        return asset('storage/' . $path);
+        // OR: Storage::disk('public')->url($path);
+    })->toArray();
+}
 
     public function category()
     {
-        return $this->belongsTo(ItemCategory::class, 'category_id');
+        return $this->belongsTo(ItemCategory::class);
     }
 
     public function subcategory()
     {
-        return $this->belongsTo(ItemSubcategory::class, 'subcategory_id');
+        return $this->belongsTo(ItemSubcategory::class);
     }
-        public function owner()
+
+    public function owner()
     {
         return $this->belongsTo(AppOwnerUser::class, 'shop_id', 'shop_id');
-    }
-
-    public function itemsBySubcategory(Request $request)
-    {
-        $request->validate([
-            'subcategory_id' => 'required|exists:item_subcategories,id',
-            'shop_id' => 'nullable|exists:shops,shop_id', // optional
-        ]);
-
-        $subcategoryId = $request->subcategory_id;
-        $shopId = $request->shop_id;
-
-        $items = Item::with(['category', 'subcategory', 'owner'])
-            ->where('subcategory_id', $subcategoryId)
-            ->when($shopId, function ($query) use ($shopId) {
-                // ✅ Same shop items first
-                $query->orderByRaw("shop_id = ? DESC", [$shopId]);
-            })
-            ->orderBy('id', 'DESC') // fallback ordering
-            ->get();
-
-        return response()->json([
-            'data' => $items
-        ], 200);
     }
 }

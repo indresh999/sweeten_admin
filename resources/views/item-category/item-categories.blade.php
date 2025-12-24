@@ -10,9 +10,22 @@
 
         <a href="{{ route('admin.item-categories.create') }}" class="btn btn-primary mb-3">Add Category</a>
 
+
         <div class="card">
             <div class="card-body">
-
+                <form method="GET" action="{{ route('admin.item-categories.index') }}" class="row g-2 mb-3">
+                    <div class="col-md-3">
+                        <select name="category_type" class="form-select" onchange="this.form.submit()">
+                            <option value="">All Categories</option>
+                            <option value="birthday" {{ request('category_type') == 'birthday' ? 'selected' : '' }}>
+                                Birthday Categories 🎂
+                            </option>
+                            <option value="normal" {{ request('category_type') == 'normal' ? 'selected' : '' }}>
+                                Normal Categories
+                            </option>
+                        </select>
+                    </div>
+                </form>
                 <table class="table table-bordered text-center">
                     <thead class="table-dark">
                         <tr>
@@ -20,6 +33,7 @@
                             <th>Image</th>
                             <th>Name</th>
                             <th>Description</th>
+                            <th>Category Type</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -43,7 +57,13 @@
 
                                 <td>{{ $cat->category_name }}</td>
                                 <td>{{ $cat->description }}</td>
-
+                                <td>
+                                    @if ($cat->category_type === 'birthday')
+                                        <span class="badge bg-info">Birthday 🎂</span>
+                                    @else
+                                        <span class="badge bg-secondary">Normal</span>
+                                    @endif
+                                </td>
                                 <td>
                                     <span class="badge bg-{{ $cat->status ? 'success' : 'danger' }}">
                                         {{ $cat->status ? 'Active' : 'Inactive' }}
@@ -54,8 +74,8 @@
                                     <a href="{{ route('admin.item-categories.edit', $cat->id) }}"
                                         class="btn btn-warning btn-sm">Edit</a>
 
-                                    <form action="{{ route('admin.item-categories.destroy', $cat->id) }}" method="POST"
-                                        class="d-inline"
+                                    <form action="{{ route('admin.item-categories.destroy', $cat->id) }}"
+                                        method="POST" class="d-inline"
                                         onsubmit="return confirm('Are you sure you want to {{ $cat->status ? 'deactivate' : 'activate' }} this category?')">
 
                                         @csrf

@@ -49,9 +49,7 @@ class ItemController extends Controller
 
         $data = $validator->validated();
 
-        // ------------------------------------------------------
-        // VALIDATE SUBCATEGORY BELONGS TO CATEGORY
-        // ------------------------------------------------------
+        // Validate subcategory belongs to category
         if (!empty($data['subcategory_id'])) {
             $sub = ItemSubcategory::find($data['subcategory_id']);
 
@@ -62,23 +60,17 @@ class ItemController extends Controller
             }
         }
 
-        // ------------------------------------------------------
         // IMAGE UPLOAD
-        // ------------------------------------------------------
         $imagePaths = [];
 
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
-                $path = $image->store('uploads/items', 'public');
-                $imagePaths[] = $path;
+                $imagePaths[] = $image->store('items', 'public'); // ✅ FIXED
             }
         }
 
-        $data['images'] = json_encode($imagePaths);
+        $data['images'] = $imagePaths; // ✅ FIXED
 
-        // ------------------------------------------------------
-        // CREATE ITEM
-        // ------------------------------------------------------
         $item = Item::create($data);
 
         return response()->json([
@@ -99,17 +91,17 @@ class ItemController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'shop_id'        => 'sometimes|required|integer',
-            'category_id'    => 'sometimes|required|exists:item_categories,id',
-            'subcategory_id' => 'nullable|exists:item_subcategories,id',
-            'item_name'      => 'sometimes|required|string|max:255',
-            'description'    => 'sometimes|nullable|string',
-            'price'          => 'sometimes|required|numeric',
-            'offer_price'    => 'sometimes|nullable|numeric',
-            'min_quantity'   => 'sometimes|required|integer',
-            'weight_or_piece'=> 'sometimes|required|string',
-            'status'         => 'sometimes|required|in:active,inactive',
-            'images.*'       => 'sometimes|file|mimes:jpeg,png,jpg,gif,webp|max:2048',
+            'shop_id'         => 'sometimes|required|integer',
+            'category_id'     => 'sometimes|required|exists:item_categories,id',
+            'subcategory_id'  => 'nullable|exists:item_subcategories,id',
+            'item_name'       => 'sometimes|required|string|max:255',
+            'description'     => 'sometimes|nullable|string',
+            'price'           => 'sometimes|required|numeric',
+            'offer_price'     => 'sometimes|nullable|numeric',
+            'min_quantity'    => 'sometimes|required|integer',
+            'weight_or_piece' => 'sometimes|required|string|max:50',
+            'status'          => 'sometimes|required|in:active,inactive',
+            'images.*'        => 'sometimes|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
 
         if ($validator->fails()) {
@@ -119,11 +111,10 @@ class ItemController extends Controller
         $data = $validator->validated();
 
         // ------------------------------------------------------
-        // CHECK SUBCATEGORY RELATION
+        // CHECK SUBCATEGORY BELONGS TO CATEGORY
         // ------------------------------------------------------
         if (!empty($data['subcategory_id'])) {
             $sub = ItemSubcategory::find($data['subcategory_id']);
-
             $categoryId = $data['category_id'] ?? $item->category_id;
 
             if ($sub->category_id != $categoryId) {
@@ -134,17 +125,23 @@ class ItemController extends Controller
         }
 
         // ------------------------------------------------------
-        // IMAGE UPDATING
+        // IMAGE UPDATE (REPLACE OLD IMAGES)
         // ------------------------------------------------------
         if ($request->hasFile('images')) {
-            $images = [];
 
-            foreach ($request->file('images') as $image) {
-                $path = $image->store('uploads/items', 'public');
-                $images[] = $path;
+            // OPTIONAL: delete old images
+            if (!empty($item->images)) {
+                foreach ($item->images as $oldImage) {
+                    \Storage::disk('public')->delete($oldImage);
+                }
             }
 
-            $data['images'] = json_encode($images);
+            $imagePaths = [];
+            foreach ($request->file('images') as $image) {
+                $imagePaths[] = $image->store('items', 'public'); // ✅ FIXED
+            }
+
+            $data['images'] = $imagePaths; // ✅ FIXED
         }
 
         // ------------------------------------------------------
@@ -154,7 +151,7 @@ class ItemController extends Controller
 
         return response()->json([
             'message' => 'Item updated successfully',
-            'item'    => $item
+            'data'    => $item
         ]);
     }
 

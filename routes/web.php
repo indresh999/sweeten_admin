@@ -125,6 +125,24 @@ Route::prefix('admin')->name('admin.')->group(function () {
 });
 
 
+Route::prefix('admin')
+    ->name('admin.')
+    ->group(function () {
+
+        Route::get(
+            'get-subcategories/{categoryId}',
+            [AdminItemController::class, 'getSubcategories']
+        )->name('get-subcategories');
+
+        Route::resource('items', AdminItemController::class);
+    });
+Route::get(
+    '/admin/get-subcategories/{categoryId}',
+    [AdminItemController::class, 'getSubcategories']
+)->name('admin.get-subcategories');
+
+Route::resource('admin/items', AdminItemController::class);
+
 
 //App Details Page => 'Dashboard'], function() {
 Route::group(['prefix' => 'menu-style'], function() {
@@ -185,6 +203,28 @@ Route::group(['prefix' => 'forms'], function() {
     Route::get('validation', [HomeController::class, 'validation'])->name('forms.validation');
 });
 
+
+Route::middleware(['auth'])
+    ->prefix('admin')
+    ->name('admin.')
+    ->group(function () {
+
+        // Item Categories
+        Route::resource('item-categories', AdminItemCategoryController::class);
+
+        // Item Subcategories
+        Route::resource('item-subcategories', AdminItemSubcategoryController::class);
+
+        // Items
+        Route::resource('items', AdminItemController::class);
+
+        // Ajax: get subcategories by category
+        Route::get(
+            'get-subcategories/{categoryId}',
+            [AdminItemController::class, 'getSubcategories']
+        )->name('get-subcategories');
+    });
+    
 
 //Table Page Routs
 Route::group(['prefix' => 'table'], function() {

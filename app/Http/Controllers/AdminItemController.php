@@ -2,122 +2,191 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\Item;
 use App\Models\ItemCategory;
-use App\Models\AppOwnerUser; // shop owners
+use App\Models\ItemSubcategory;
+use App\Models\AppOwnerUser;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class AdminItemController extends Controller
 {
-   public function index(Request $request)
-{
-    $owners = AppOwnerUser::orderBy('restaurant_name')->get();
+    public function index(Request $request)
+    {
+        $owners = AppOwnerUser::orderBy('restaurant_name')->get();
 
-    $items = Item::with(['category', 'subcategory', 'owner'])
-        ->when($request->shop_id, function ($query) use ($request) {
-            $query->where('shop_id', $request->shop_id);
-        })
-        ->orderBy('id', 'desc')
-        ->paginate(10)
-        ->withQueryString(); // keep filter on pagination
+        $items = Item::with(['category', 'subcategory', 'owner'])
+            ->when($request->shop_id, fn ($q) => $q->where('shop_id', $request->shop_id))
+            ->latest()
+            ->paginate(10)
+            ->withQueryString();
 
-    return view('items.index', compact('items', 'owners'));
-}
+        return view('items.index', compact('items', 'owners'));
+    }
 
     public function create()
     {
-        $categories = ItemCategory::where('status',1)->get();
-        $owners = AppOwnerUser::all(); // all shops
-        return view('items.create', compact('categories','owners'));
+        $categories = ItemCategory::where('status', 1)->get();
+        $owners = AppOwnerUser::all();
+
+        return view('items.create', compact('categories', 'owners'));
     }
 
+    public function getSubcategories($categoryId)
+    {
+        return response()->json(
+            ItemSubcategory::where('category_id', $categoryId)
+                ->where('status', 1)
+                ->get()
+        );
+    }
+
+    // ------------------------------------------------------
+    // STORE ITEM
+    // ------------------------------------------------------
     public function store(Request $request)
     {
         $request->validate([
             'owner_id'       => 'required',
-            'category_id'    => 'required',
-            'item_name'      => 'required|string',
+            'category_id'    => 'required|exists:item_categories,id',
+            'subcategory_id' => 'required|exists:item_subcategories,id',
+            'item_name'      => 'required|string|max:255',
             'price'          => 'required|numeric',
-            'gst_percent'    => 'nullable|numeric',
-            'images'         => 'nullable|image|max:2048'
+            'images.*'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
-        $imageName = null;
+        $imagePaths = [];
 
         if ($request->hasFile('images')) {
-            $imageName = time().'_item.'.$request->images->extension();
-            $request->images->move(public_path('uploads/items'), $imageName);
+            foreach ($request->file('images') as $image) {
+                $filename = Str::uuid() . '.webp';
+                $imagePaths[] = $image->storeAs('items', $filename, 'public'); // ✅ FIX
+            }
         }
 
         Item::create([
-            'owner_id'        => $request->owner_id,
+            'shop_id'         => $request->owner_id,
             'category_id'     => $request->category_id,
+            'subcategory_id'  => $request->subcategory_id,
             'item_name'       => $request->item_name,
             'description'     => $request->description,
             'price'           => $request->price,
             'offer_price'     => $request->offer_price,
-            'min_quantity'    => $request->min_quantity,
+            'min_quantity'    => $request->min_quantity ?? 1,
             'weight_or_piece' => $request->weight_or_piece,
             'gst_percent'     => $request->gst_percent,
-            'status'          => $request->status ?? 1,
-            'images'          => $imageName
+            'status'          => $request->status ?? 'active',
+            'images'          => $imagePaths, // ✅ FIX
         ]);
 
-        return redirect()->route('items.index')->with('success','Item created successfully.');
+        return redirect()
+            ->route('admin.items.index')
+            ->with('success', 'Item created successfully.');
     }
 
+    // ------------------------------------------------------
+    // SHOW ITEM
+    // ------------------------------------------------------
+    public function show($id)
+    {
+        $item = Item::with(['category', 'subcategory', 'owner'])
+            ->findOrFail($id);
+
+        return view('items.show', compact('item'));
+    }
+
+    // ------------------------------------------------------
+    // EDIT ITEM
+    // ------------------------------------------------------
     public function edit($id)
     {
         $item = Item::findOrFail($id);
-        $categories = ItemCategory::where('status',1)->get();
+
+        $categories = ItemCategory::where('status', 1)->get();
         $owners = AppOwnerUser::all();
-        return view('items.edit', compact('item','categories','owners'));
+
+        $subcategories = ItemSubcategory::where('category_id', $item->category_id)
+            ->where('status', 1)
+            ->get();
+
+        return view('items.edit', compact(
+            'item',
+            'categories',
+            'owners',
+            'subcategories'
+        ));
     }
 
+    // ------------------------------------------------------
+    // UPDATE ITEM
+    // ------------------------------------------------------
     public function update(Request $request, $id)
     {
         $request->validate([
-            'item_name' => 'required|string',
-            'price'     => 'required|numeric'
+            'owner_id'       => 'required',
+            'category_id'    => 'required|exists:item_categories,id',
+            'subcategory_id' => 'required|exists:item_subcategories,id',
+            'item_name'      => 'required|string|max:255',
+            'price'          => 'required|numeric',
+            'images.*'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
         $item = Item::findOrFail($id);
 
-        $imageName = $item->images;
+        // Keep old images if no new upload
+        $imagePaths = $item->images ?? [];
 
         if ($request->hasFile('images')) {
-            $imageName = time().'_item.'.$request->images->extension();
-            $request->images->move(public_path('uploads/items'), $imageName);
+
+            // Delete old images
+            foreach ($imagePaths as $img) {
+                Storage::disk('public')->delete($img); // ✅ FIX
+            }
+
+            $imagePaths = [];
+
+            foreach ($request->file('images') as $image) {
+                $filename = Str::uuid() . '.webp';
+                $imagePaths[] = $image->storeAs('items', $filename, 'public'); // ✅ FIX
+            }
         }
 
         $item->update([
-            'owner_id'        => $request->owner_id,
+            'shop_id'         => $request->owner_id,
             'category_id'     => $request->category_id,
+            'subcategory_id'  => $request->subcategory_id,
             'item_name'       => $request->item_name,
             'description'     => $request->description,
             'price'           => $request->price,
             'offer_price'     => $request->offer_price,
-            'min_quantity'    => $request->min_quantity,
+            'min_quantity'    => $request->min_quantity ?? 1,
             'weight_or_piece' => $request->weight_or_piece,
             'gst_percent'     => $request->gst_percent,
-            'status'          => $request->status ?? 1,
-            'images'          => $imageName
+            'status'          => $request->status ?? 'active',
+            'images'          => $imagePaths, // ✅ FIX
         ]);
 
-        return redirect()->route('items.index')->with('success','Item updated successfully.');
+        return redirect()
+            ->route('admin.items.index')
+            ->with('success', 'Item updated successfully.');
     }
 
+    // ------------------------------------------------------
+    // DELETE ITEM
+    // ------------------------------------------------------
     public function destroy($id)
     {
-        Item::findOrFail($id)->delete();
-        return redirect()->route('items.index')->with('success','Item deleted successfully.');
-    }
+        $item = Item::findOrFail($id);
 
-    public function show($id)
-    {
-        $item = Item::with(['category', 'subcategory', 'owner'])->findOrFail($id);
+        foreach ($item->images ?? [] as $img) {
+            Storage::disk('public')->delete($img); // ✅ FIX
+        }
 
-        return view('items.show', compact('item'));
+        $item->delete();
+
+        return redirect()
+            ->route('admin.items.index')
+            ->with('success', 'Item deleted successfully.');
     }
 }

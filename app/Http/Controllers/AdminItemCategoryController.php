@@ -10,11 +10,23 @@ use Illuminate\Support\Facades\Storage;
 
 class AdminItemCategoryController extends Controller
 {
-    public function index()
-    {
-        $categories = ItemCategory::orderBy('id','desc')->paginate(10);
-        return view('item-category.item-categories', compact('categories'));
+  public function index(Request $request)
+{
+    $query = ItemCategory::orderBy('id', 'desc');
+
+    // ✅ FILTER BY CATEGORY TYPE
+    if ($request->filled('category_type')) {
+        if ($request->category_type === 'birthday') {
+            $query->where('category_type', 'birthday');
+        } elseif ($request->category_type === 'normal') {
+            $query->whereNull('category_type');
+        }
     }
+
+    $categories = $query->paginate(10)->withQueryString();
+
+    return view('item-category.item-categories', compact('categories'));
+}
 
     public function create()
     {
@@ -25,36 +37,32 @@ class AdminItemCategoryController extends Controller
     {
         $request->validate([
             'category_name' => 'required|string|max:255',
-            'image'         => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
-    
         $imagePath = null;
 
         if ($request->hasFile('image')) {
             $file = $request->file('image');
-
             $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
-
             $path = $file->storeAs('categories', $filename, 'public');
 
-            // FULL URL stored in DB
-            $imagePath = asset('storage/' . $path);
+            // ✅ RELATIVE PATH ONLY
+            $imagePath = 'storage/' . $path;
         }
 
-    
-        ItemCategory::create([
+      ItemCategory::create([
             'category_name' => $request->category_name,
             'description'   => $request->description,
             'status'        => $request->status ?? 1,
             'image'         => $imagePath,
+            'category_type' => $request->has('is_birthday') ? 'birthday' : null,
+            'is_featured'   => $request->has('is_featured') ? 1 : 0, // ✅ FEATURED
         ]);
 
-        return redirect()
-            ->route('admin.item-categories.index')
+        return redirect()->route('admin.item-categories.index')
             ->with('success', 'Category created successfully.');
     }
-
     public function edit($id)
     {
         $category = ItemCategory::findOrFail($id);
@@ -70,32 +78,35 @@ class AdminItemCategoryController extends Controller
 
         $category = ItemCategory::findOrFail($id);
 
-        $imagePath = $category->image;
+        $imagePath = $category->getRawOriginal('image'); // 👈 IMPORTANT
 
         if ($request->hasFile('image')) {
 
-            // DELETE OLD IMAGE
-            if ($category->image) {
-                $oldPath = str_replace(asset('storage') . '/', '', $category->image);
-                Storage::disk('public')->delete($oldPath);
+            // ✅ DELETE OLD IMAGE
+            if ($imagePath) {
+                Storage::disk('public')->delete(
+                    str_replace('storage/', '', $imagePath)
+                );
             }
 
             $file = $request->file('image');
             $filename = Str::uuid() . '.webp';
             $path = $file->storeAs('categories', $filename, 'public');
 
-            $imagePath = asset('storage/' . $path);
+            // ✅ SAVE RELATIVE PATH
+            $imagePath = 'storage/' . $path;
         }
 
-        $category->update([
-            'category_name' => $request->category_name,
-            'description'   => $request->description,
-            'status'        => $request->status ?? 1,
-            'image'         => $imagePath,
-        ]);
+                $category->update([
+                'category_name' => $request->category_name,
+                'description'   => $request->description,
+                'status'        => $request->status ?? 1,
+                'image'         => $imagePath ?? $category->image, // keep old image if not changed
+                'category_type' => $request->has('is_birthday') ? 'birthday' : null,
+                'is_featured'   => $request->has('is_featured') ? 1 : 0, // ✅ IMPORTANT
+            ]);
 
-        return redirect()
-            ->route('admin.item-categories.index')
+        return redirect()->route('admin.item-categories.index')
             ->with('success', 'Category updated successfully.');
     }
 
@@ -103,15 +114,17 @@ class AdminItemCategoryController extends Controller
     {
         $category = ItemCategory::findOrFail($id);
 
-        if ($category->image) {
-            $path = str_replace(asset('storage') . '/', '', $category->image);
-            Storage::disk('public')->delete($path);
+        $imagePath = $category->getRawOriginal('image');
+
+        if ($imagePath) {
+            Storage::disk('public')->delete(
+                str_replace('storage/', '', $imagePath)
+            );
         }
 
         $category->delete();
 
-        return redirect()
-            ->route('admin.item-categories.index')
+        return redirect()->route('admin.item-categories.index')
             ->with('success', 'Category deleted successfully.');
     }
 }
