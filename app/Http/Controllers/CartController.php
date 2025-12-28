@@ -9,11 +9,10 @@ use App\Models\Item;
 class CartController extends Controller
 {
     // List all items in user's cart for a specific owner/bakery
-    public function listCart(Request $request, $user_id, $owner_id)
+    public function listCart(Request $request, $user_id)
     {
         $cartItems = CartItem::with('item')
             ->where('user_id', $user_id)
-            ->where('owner_id', $owner_id)
             ->get();
 
         return response()->json(['data' => $cartItems], 200);

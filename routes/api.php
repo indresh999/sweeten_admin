@@ -106,7 +106,7 @@ Route::get('/orders', [OrderController::class, 'listUserOrders']);
 
 Route::prefix('cart')->group(function () {
 
-    Route::get('/list/{user_id}/{owner_id}', [CartController::class, 'listCart']);
+    Route::get('/list/{user_id}', [CartController::class, 'listCart']);
     Route::post('/add', [CartController::class, 'addToCart']);
     Route::put('/update/{id}', [CartController::class, 'updateCart']);
     Route::delete('/remove/{id}', [CartController::class, 'removeFromCart']);
