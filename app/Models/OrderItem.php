@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class OrderItem extends Model
 {
-    protected $fillable = ['order_id', 'item_id', 'quantity', 'price', 'offer_price'];
+    protected $fillable = ['order_id', 'item_id', 'quantity', 'price', 'offer_price', 'item'];
 
     public function item()
     {
@@ -17,4 +17,9 @@ class OrderItem extends Model
     {
         return $this->belongsTo(Order::class, 'order_id');
     }
+
+    // OrderItem.php
+    protected $casts = [
+        'item' => 'array',
+    ];
 } 

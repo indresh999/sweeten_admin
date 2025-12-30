@@ -20,6 +20,8 @@ class Item extends Model
         'gst_percent',
         'status',
         'images',
+        'cgst',
+        'sgst'
     ];
 
     protected $casts = [

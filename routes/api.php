@@ -54,6 +54,10 @@ Route::prefix('delivery')->group(function () {
         Route::post('documents', [DeliveryBoyDocumentController::class, 'upload']);
         Route::get('documents', [DeliveryBoyDocumentController::class, 'list']);
     });
+
+    Route::post('/delivery/order/status', [DeliveryController::class, 'updateOrderStatus']);
+    Route::get('/orders/{orderId}/status', [DeliveryController::class, 'getOrderStatus']);
+    Route::get('/orders/{orderId}/tracking', [DeliveryController::class, 'orderTracking']);
 });
 
 
@@ -103,6 +107,8 @@ Route::post('/orders/create', [OrderController::class, 'createOrder']);
 Route::put('/orders/update/{orderId}', [OrderController::class, 'updateOrder']);
 Route::post('/orders/cancel/{orderId}', [OrderController::class, 'cancelOrder']);
 Route::get('/orders', [OrderController::class, 'listUserOrders']);
+Route::get('/cancel-reasons', [OrderController::class, 'getCancelReasons']);
+Route::get('/orders/{id}', [OrderController::class, 'getOrderById']);
 
 Route::prefix('cart')->group(function () {
 

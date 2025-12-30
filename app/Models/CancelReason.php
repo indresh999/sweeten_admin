@@ -7,7 +7,7 @@ class CancelReason extends Model
 {
     protected $table = 'cancel_reasons';
 
-    protected $fillable = ['reason', 'is_active'];
+    protected $fillable = ['reason', 'status'];
 
     public function orders()
     {

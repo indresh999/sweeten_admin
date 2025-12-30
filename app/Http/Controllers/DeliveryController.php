@@ -392,4 +392,102 @@ private function autoAssignInternalWithoutOverwrite($orderId)
 
     return ['assigned' => true, 'delivery_boy_id' => $boy->id];
 }
+  
+    public function orderTracking($orderId)
+    {
+        $order = Order::with([
+            'owner',
+            'items',
+            'assignment.boy', // ✅ correct
+        ])->find($orderId);
+
+        if (!$order) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Order not found'
+            ], 404);
+        }
+
+        $timeline = DeliveryTimeline::where('order_id', $orderId)
+            ->orderBy('created_at')
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'order_id'         => $order->id,
+                'order_status'     => $order->status,
+                'shop'             => $order->owner,
+                'expected_delivery'=> optional($order->assignment)->expected_delivery,
+                'delivery_boy'     => optional($order->assignment)->deliveryBoy,
+                'timeline'         => $timeline,
+            ]
+        ], 200);
+    }
+
+    public function updateOrderStatus(Request $request)
+    {
+        $request->validate([
+            'order_id' => 'required|exists:orders,id',
+            'delivery_boy_id' => 'required|exists:delivery_boys,id',
+            'status' => 'required|in:accepted,picked,out_for_delivery,delivered',
+            'message' => 'nullable|string'
+        ]);
+
+        DB::beginTransaction();
+        try {
+
+            $assignment = DeliveryAssignment::where('order_id', $request->order_id)
+                ->where('delivery_boy_id', $request->delivery_boy_id)
+                ->firstOrFail();
+
+            // Update assignment status
+            $assignment->update([
+                'status' => $request->status,
+            ]);
+
+            // Update order status
+            Order::where('id', $request->order_id)
+                ->update(['status' => $request->status]);
+
+            // Add timeline entry
+            DeliveryTimeline::create([
+                'order_id' => $request->order_id,
+                'status' => $request->status,
+                'message' => $request->message ?? ucfirst($request->status),
+                'created_at' => now()
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Order status updated'
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => false,
+                'message' => 'Unable to update order status'
+            ], 500);
+        }
+    }
+    public function getOrderStatus($orderId)
+    {
+        $order = Order::find($orderId);
+
+        if (!$order) {
+            return response()->json(['status' => false], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => [
+                'order_id' => $order->id,
+                'status' => $order->status,
+                'updated_at' => $order->updated_at
+            ]
+        ], 200);
+    }
 }
