@@ -44,4 +44,5 @@ return array(
     '320163ac6b93aebe3dc25b60a0533d56' => $vendorDir . '/spatie/laravel-ignition/src/helpers.php',
     '377b22b161c09ed6e5152de788ca020a' => $vendorDir . '/spatie/laravel-permission/src/helpers.php',
     'ef157334f1067da991ff8953983afdb3' => $baseDir . '/app/Helpers/helper.php',
+    'a3f7b31c05446a26cfc4f7aa808f24b3' => $baseDir . '/app/Helpers/OrderHelper.php',
 );

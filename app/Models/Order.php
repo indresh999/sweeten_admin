@@ -63,4 +63,11 @@ protected $fillable = [
             'delivery_boy_id'  // FK on DeliveryAssignment
         );
     }
+
+    public function timeline()
+{
+    return $this->hasMany(DeliveryTimeline::class, 'order_id')
+                ->orderBy('created_at');
+}
+
 }

@@ -1,157 +1,140 @@
-<x-app-layout :assets="$assets ?? []">
-<div class="container py-4">
-    <h3>Edit Item - #{{ $item->id }}</h3>
+<x-app-layout>
+    <div class="container py-4">
+        <h3>Edit Item</h3>
 
-    <div class="card">
-        <div class="card-body">
-            <form action="{{ route('admin.items.update', $item->id) }}"
-                  method="POST"
-                  enctype="multipart/form-data">
-                @csrf @method('PUT')
+        <form method="POST" action="{{ route('admin.items.update', $item->id) }}" enctype="multipart/form-data">
+            @csrf @method('PUT')
 
-                <div class="row">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
 
-                    {{-- OWNER --}}
-                    <div class="col-md-6 mb-3">
-                        <label>Owner (Shop)</label>
-                        <select name="owner_id" class="form-select" required>
-                            @foreach($owners as $o)
-                                <option value="{{ $o->shop_id }}"
-                                    {{ old('owner_id', $item->shop_id) == $o->shop_id ? 'selected' : '' }}>
-                                    {{ $o->restaurant_name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+                        {{-- OWNER --}}
+                        <div class="col-md-6 mb-3">
+                            <label>Owner</label>
+                            <select name="owner_id" class="form-select">
+                                @foreach ($owners as $o)
+                                    <option value="{{ $o->shop_id }}"
+                                        {{ $item->shop_id == $o->shop_id ? 'selected' : '' }}>
+                                        {{ $o->restaurant_name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                    {{-- CATEGORY --}}
-                    <div class="col-md-6 mb-3">
-                        <label>Category</label>
-                        <select name="category_id" id="categorySelect" class="form-select" required>
-                            @foreach($categories as $c)
-                                <option value="{{ $c->id }}"
-                                    {{ old('category_id', $item->category_id) == $c->id ? 'selected' : '' }}>
-                                    {{ $c->category_name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+                        {{-- CATEGORY --}}
+                        <div class="col-md-6 mb-3">
+                            <label>Category</label>
+                            <select name="category_id" id="categorySelect" class="form-select">
+                                @foreach ($categories as $c)
+                                    <option value="{{ $c->id }}"
+                                        {{ $item->category_id == $c->id ? 'selected' : '' }}>
+                                        {{ $c->category_name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                    {{-- SUBCATEGORY --}}
-                    <div class="col-md-6 mb-3">
-                        <label>Subcategory</label>
-                        <select name="subcategory_id" id="subcategorySelect" class="form-select" required>
-                            @foreach($subcategories as $sub)
-                                <option value="{{ $sub->id }}"
-                                    {{ old('subcategory_id', $item->subcategory_id) == $sub->id ? 'selected' : '' }}>
-                                    {{ $sub->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+                        {{-- SUBCATEGORY --}}
+                        <div class="col-md-6 mb-3">
+                            <label>Subcategory</label>
+                            <select name="subcategory_id" id="subcategorySelect" class="form-select">
+                                @foreach ($subcategories as $s)
+                                    <option value="{{ $s->id }}"
+                                        {{ $item->subcategory_id == $s->id ? 'selected' : '' }}>
+                                        {{ $s->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                    {{-- ITEM NAME --}}
-                    <div class="col-md-6 mb-3">
-                        <label>Item Name</label>
-                        <input type="text"
-                               name="item_name"
-                               class="form-control"
-                               value="{{ old('item_name', $item->item_name) }}"
-                               required>
-                    </div>
+                        {{-- ITEM NAME --}}
+                        <div class="col-md-6 mb-3">
+                            <label>Item Name</label>
+                            <input name="item_name" value="{{ $item->item_name }}" class="form-control">
+                        </div>
 
-                    {{-- PRICE --}}
-                    <div class="col-md-6 mb-3">
-                        <label>Price</label>
-                        <input type="number" step="0.01"
-                               name="price"
-                               class="form-control"
-                               value="{{ old('price', $item->price) }}"
-                               required>
-                    </div>
+                        {{-- DESCRIPTION --}}
+                        <div class="col-md-12 mb-3">
+                            <textarea name="description" class="form-control">{{ $item->description }}</textarea>
+                        </div>
 
-                    {{-- OFFER PRICE --}}
-                    <div class="col-md-6 mb-3">
-                        <label>Offer Price</label>
-                        <input type="number" step="0.01"
-                               name="offer_price"
-                               class="form-control"
-                               value="{{ old('offer_price', $item->offer_price) }}">
-                    </div>
-
-                    {{-- GST --}}
-                    <div class="col-md-6 mb-3">
-                        <label>GST %</label>
-                        <input type="number" step="0.01"
-                               name="gst_percent"
-                               class="form-control"
-                               value="{{ old('gst_percent', $item->gst_percent) }}">
-                    </div>
-
-                    {{-- DESCRIPTION --}}
-                    <div class="col-md-12 mb-3">
-                        <label>Description</label>
-                        <textarea name="description"
-                                  class="form-control">{{ old('description', $item->description) }}</textarea>
-                    </div>
-
-                    {{-- EXISTING IMAGES --}}
-                    <div class="col-md-12 mb-3">
-                        <label>Existing Images</label>
-                        <div class="d-flex gap-2 flex-wrap">
-                            @foreach($item->images ?? [] as $img)
-                                <div class="text-center">
-                                    <img src="{{ asset($img) }}"
-                                         class="border rounded mb-1"
-                                         style="height:90px;width:120px;object-fit:cover;">
-                                </div>
+                        {{-- EXISTING IMAGES --}}
+                        <div class="col-md-12 mb-3">
+                            @foreach ($item->image_urls as $img)
+                                <img src="{{ $img }}" width="90" class="rounded border me-2 mb-2">
                             @endforeach
                         </div>
+
+                        {{-- ADD IMAGES --}}
+                        <div class="col-md-12 mb-3">
+                            <input type="file" name="images[]" class="form-control" multiple>
+                        </div>
+
                     </div>
 
-                    {{-- ADD NEW IMAGES --}}
-                    <div class="col-md-12 mb-3">
-                        <label>Add Images</label>
-                        <input type="file"
-                               name="images[]"
-                               class="form-control"
-                               multiple
-                               accept="image/*">
+                    <hr>
+                    <h5>Variants</h5>
+
+                    <div id="variantsWrapper">
+                        @foreach ($item->variants as $i => $v)
+                            <div class="row mb-2 variant-row">
+                                <input type="hidden" name="variants[{{ $i }}][id]"
+                                    value="{{ $v->id }}">
+                                <div class="col-md-3">
+                                    <input name="variants[{{ $i }}][label]" value="{{ $v->label }}"
+                                        class="form-control">
+                                </div>
+                                <div class="col-md-2">
+                                    <input name="variants[{{ $i }}][price]" value="{{ $v->price }}"
+                                        class="form-control">
+                                </div>
+                                <div class="col-md-2">
+                                    <input name="variants[{{ $i }}][offer_price]"
+                                        value="{{ $v->offer_price }}" class="form-control">
+                                </div>
+                                <div class="col-md-2">
+                                    <input name="variants[{{ $i }}][gst_percent]"
+                                        value="{{ $v->gst_percent }}" class="form-control">
+                                </div>
+                                <div class="col-md-2">
+                                    <input name="variants[{{ $i }}][hsn_code]" value="{{ $v->hsn_code }}"
+                                        class="form-control">
+                                </div>
+                                <div class="col-md-1">
+                                    <button type="button" class="btn btn-danger btn-sm"
+                                        onclick="this.closest('.variant-row').remove()">✕</button>
+                                </div>
+                            </div>
+                        @endforeach
                     </div>
 
-                    {{-- STATUS --}}
-                    <div class="col-md-6 mb-3">
-                        <label>Status</label>
-                        <select name="status" class="form-select">
-                            <option value="1" {{ $item->status ? 'selected' : '' }}>Active</option>
-                            <option value="0" {{ !$item->status ? 'selected' : '' }}>Inactive</option>
-                        </select>
-                    </div>
+                    <button type="button" class="btn btn-outline-secondary" onclick="addVariantRow()">+ Add
+                        Variant</button>
+
+                    <br><br>
+                    <button class="btn btn-success">Update Item</button>
 
                 </div>
-
-                <button class="btn btn-success">Update Item</button>
-            </form>
-        </div>
+            </div>
+        </form>
     </div>
-</div>
 
-{{-- AJAX SUBCATEGORY LOAD --}}
-<script>
-document.getElementById('categorySelect').addEventListener('change', function () {
-    const categoryId = this.value;
-    const subSelect = document.getElementById('subcategorySelect');
+    <script>
+        let variantIndex = {{ $item->variants->count() }};
 
-    subSelect.innerHTML = '<option>Loading...</option>';
-
-    fetch(`/admin/get-subcategories/${categoryId}`)
-        .then(res => res.json())
-        .then(data => {
-            subSelect.innerHTML = '';
-            data.forEach(sub => {
-                subSelect.innerHTML += `<option value="${sub.id}">${sub.name}</option>`;
-            });
-        });
-});
-</script>
+        function addVariantRow() {
+            document.getElementById('variantsWrapper')
+                .insertAdjacentHTML('beforeend', `
+                    <div class="row mb-2 variant-row">
+                    <div class="col-md-3"><input name="variants[${variantIndex}][label]" class="form-control"></div>
+                    <div class="col-md-2"><input name="variants[${variantIndex}][price]" class="form-control"></div>
+                    <div class="col-md-2"><input name="variants[${variantIndex}][offer_price]" class="form-control"></div>
+                    <div class="col-md-2"><input name="variants[${variantIndex}][gst_percent]" class="form-control"></div>
+                    <div class="col-md-2"><input name="variants[${variantIndex}][hsn_code]" class="form-control"></div>
+                    <div class="col-md-1"><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.variant-row').remove()">✕</button></div>
+                    </div>`);
+            variantIndex++;
+        }
+    </script>
 </x-app-layout>

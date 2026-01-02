@@ -60,4 +60,15 @@ class Item extends Model
     {
         return $this->belongsTo(AppOwnerUser::class, 'shop_id', 'shop_id');
     }
+    
+    public function variants()
+    {
+        return $this->hasMany(ItemVariant::class);
+    }
+
+    // OPTIONAL: default variant
+    public function defaultVariant()
+    {
+        return $this->hasOne(ItemVariant::class)->where('is_default', true);
+    }
 }
