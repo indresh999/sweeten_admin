@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Storage;
 
 class Item extends Model
 {
+    protected $appends = ['image_urls', 'default_variant'];
+
     protected $fillable = [
         'shop_id',
         'category_id',
@@ -28,23 +30,20 @@ class Item extends Model
         'images' => 'array',
     ];
 
-    // 👇 ADD THIS
-    protected $appends = ['image_urls'];
-
     /**
      * Return full image URLs
      */
-   public function getImageUrlsAttribute()
-{
-    if (empty($this->images)) {
-        return [];
-    }
+    public function getImageUrlsAttribute()
+    {
+        if (empty($this->images)) {
+            return [];
+        }
 
-    return collect($this->images)->map(function ($path) {
-        return asset('storage/' . $path);
-        // OR: Storage::disk('public')->url($path);
-    })->toArray();
-}
+        return collect($this->images)->map(function ($path) {
+            return asset('storage/' . $path);
+            // OR: Storage::disk('public')->url($path);
+        })->toArray();
+    }
 
     public function category()
     {
@@ -70,5 +69,13 @@ class Item extends Model
     public function defaultVariant()
     {
         return $this->hasOne(ItemVariant::class)->where('is_default', true);
+    }
+
+    public function getDefaultVariantAttribute()
+    {
+        return $this->variants()
+            ->where('is_default', true)
+            ->where('status', 'active')
+            ->first();
     }
 }

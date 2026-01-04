@@ -13,7 +13,7 @@
 
                     {{-- OWNER --}}
                     <div class="col-md-6 mb-3">
-                        <label>Owner (Shop)</label>
+                        <label class="fw-bold">Owner (Shop)</label>
                         <select name="owner_id" class="form-select" required>
                             <option value="">Select Owner</option>
                             @foreach($owners as $o)
@@ -26,7 +26,7 @@
 
                     {{-- CATEGORY --}}
                     <div class="col-md-6 mb-3">
-                        <label>Category</label>
+                        <label class="fw-bold">Category</label>
                         <select name="category_id"
                                 id="categorySelect"
                                 class="form-select"
@@ -42,7 +42,7 @@
 
                     {{-- SUBCATEGORY --}}
                     <div class="col-md-6 mb-3">
-                        <label>Subcategory</label>
+                        <label class="fw-bold">Subcategory</label>
                         <select name="subcategory_id"
                                 id="subcategorySelect"
                                 class="form-select"
@@ -53,24 +53,26 @@
 
                     {{-- ITEM NAME --}}
                     <div class="col-md-6 mb-3">
-                        <label>Item Name</label>
+                        <label class="fw-bold">Item Name</label>
                         <input type="text"
                                name="item_name"
                                class="form-control"
+                               placeholder="Eg. Basmati Rice"
                                required>
                     </div>
 
                     {{-- DESCRIPTION --}}
                     <div class="col-md-12 mb-3">
-                        <label>Description</label>
+                        <label class="fw-bold">Description</label>
                         <textarea name="description"
                                   rows="3"
-                                  class="form-control"></textarea>
+                                  class="form-control"
+                                  placeholder="Short product description"></textarea>
                     </div>
 
                     {{-- IMAGES --}}
                     <div class="col-md-12 mb-3">
-                        <label>Images</label>
+                        <label class="fw-bold">Images</label>
                         <input type="file"
                                name="images[]"
                                class="form-control"
@@ -84,7 +86,7 @@
 
                     {{-- STATUS --}}
                     <div class="col-md-6 mb-3">
-                        <label>Status</label>
+                        <label class="fw-bold">Status</label>
                         <select name="status" class="form-select">
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
@@ -96,16 +98,26 @@
                 <hr>
 
                 {{-- VARIANTS --}}
-                <h5>Variants</h5>
+                <h5 class="mb-3">Variants</h5>
+
+                {{-- HEADER --}}
+                <div class="row fw-bold text-muted mb-1">
+                    <div class="col-md-3">Label</div>
+                    <div class="col-md-2">Price</div>
+                    <div class="col-md-2">Offer</div>
+                    <div class="col-md-2">GST %</div>
+                    <div class="col-md-2">HSN</div>
+                    <div class="col-md-1 text-center">Default</div>
+                </div>
 
                 <div id="variantsWrapper">
 
                     {{-- DEFAULT VARIANT --}}
-                    <div class="row mb-2 variant-row">
+                    <div class="row mb-2 variant-row align-items-center">
                         <div class="col-md-3">
                             <input name="variants[0][label]"
                                    class="form-control"
-                                   placeholder="Label (250g)"
+                                   placeholder="250 g / 1 Kg"
                                    required>
                         </div>
                         <div class="col-md-2">
@@ -128,23 +140,29 @@
                                    type="number"
                                    step="0.01"
                                    class="form-control"
-                                   placeholder="GST %"
+                                   placeholder="GST"
                                    required>
                         </div>
                         <div class="col-md-2">
                             <input name="variants[0][hsn_code]"
                                    class="form-control"
-                                   placeholder="HSN Code">
+                                   placeholder="HSN">
                         </div>
-                        <div class="col-md-1 d-flex align-items-center">
-                            <span class="badge bg-success">Default</span>
+                        <div class="col-md-1 text-center">
+                            <input type="radio"
+                                   name="default_variant"
+                                   checked
+                                   disabled>
+                            <input type="hidden"
+                                   name="variants[0][is_default]"
+                                   value="1">
                         </div>
                     </div>
 
                 </div>
 
                 <button type="button"
-                        class="btn btn-outline-secondary mb-3"
+                        class="btn btn-outline-primary mb-3"
                         onclick="addVariantRow()">
                     + Add Variant
                 </button>
@@ -202,7 +220,7 @@ let variantIndex = 1;
 function addVariantRow() {
     document.getElementById('variantsWrapper')
     .insertAdjacentHTML('beforeend', `
-    <div class="row mb-2 variant-row">
+    <div class="row mb-2 variant-row align-items-center">
         <div class="col-md-3">
             <input name="variants[${variantIndex}][label]"
                    class="form-control"
@@ -233,9 +251,9 @@ function addVariantRow() {
             <input name="variants[${variantIndex}][hsn_code]"
                    class="form-control">
         </div>
-        <div class="col-md-1">
+        <div class="col-md-1 text-center">
             <button type="button"
-                    class="btn btn-danger btn-sm"
+                    class="btn btn-sm btn-danger"
                     onclick="this.closest('.variant-row').remove()">✕</button>
         </div>
     </div>`);

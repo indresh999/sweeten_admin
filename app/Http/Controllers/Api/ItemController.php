@@ -219,38 +219,107 @@ class ItemController extends Controller
         return response()->json(['message'=>'Variant deleted']);
     }
     public function itemsBySubcategory(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'subcategory_id' => 'required|exists:item_subcategories,id',
-        'shop_id'        => 'nullable|exists:app_owner_shops,shop_id',
-    ]);
+    {
+        $validator = Validator::make($request->all(), [
+            'subcategory_id' => 'required|exists:item_subcategories,id',
+            'shop_id'        => 'nullable|exists:app_owner_shops,shop_id',
+        ]);
 
-    if ($validator->fails()) {
+        if ($validator->fails()) {
+            return response()->json([
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $subcategoryId = $request->subcategory_id;
+        $shopId        = $request->shop_id;
+
+        $items = Item::with([
+                'variants',
+                'category',
+                'subcategory',
+                'owner'
+            ])
+            ->where('subcategory_id', $subcategoryId)
+            ->where('status', 'active')
+            ->when($shopId, function ($q) use ($shopId) {
+                // Same shop items first
+                $q->orderByRaw('shop_id = ? DESC', [$shopId]);
+            })
+            ->orderBy('id', 'DESC')
+            ->get();
+
         return response()->json([
-            'errors' => $validator->errors()
-        ], 422);
+            'data' => $items
+        ], 200);
     }
 
-    $subcategoryId = $request->subcategory_id;
-    $shopId        = $request->shop_id;
+    // ======================================================
+    // SIMILAR ITEMS API
+    // ======================================================
+    // public function similarItems(Request $request, $itemId)
+    // {
+    //     $limit  = $request->get('limit', 10);
+    //     $shopId = $request->get('shop_id');
 
-    $items = Item::with([
-            'variants',
-            'category',
-            'subcategory',
-            'owner'
-        ])
-        ->where('subcategory_id', $subcategoryId)
-        ->where('status', 'active')
-        ->when($shopId, function ($q) use ($shopId) {
-            // Same shop items first
-            $q->orderByRaw('shop_id = ? DESC', [$shopId]);
-        })
-        ->orderBy('id', 'DESC')
+    //     $item = Item::with(['category','subcategory'])->find($itemId);
+
+    //     if (!$item) {
+    //         return response()->json([
+    //             'message' => 'Item not found'
+    //         ], 404);
+    //     }
+
+    //     $query = Item::with([
+    //             'variants' => function ($q) {
+    //                 $q->where('status', 'active');
+    //             },
+    //             'category',
+    //             'subcategory',
+    //             'owner'
+    //         ])
+    //         ->where('status', 'active')
+    //         ->where('id', '!=', $item->id)
+
+    //         // SAME SUBCATEGORY FIRST
+    //         ->where(function ($q) use ($item) {
+    //             $q->where('subcategory_id', $item->subcategory_id)
+    //             ->orWhere('category_id', $item->category_id);
+    //         });
+
+    //     // SAME SHOP FIRST (OPTIONAL)
+    //     if ($shopId) {
+    //         $query->orderByRaw('shop_id = ? DESC', [$shopId]);
+    //     }
+
+    //     $items = $query
+    //         ->orderByRaw('subcategory_id = ? DESC', [$item->subcategory_id])
+    //         ->orderBy('id', 'DESC')
+    //         ->limit($limit)
+    //         ->get();
+
+    //     return response()->json([
+    //         'data' => $items
+    //     ], 200);
+    // }
+
+    public function similarItems(Request $request)
+{
+    $request->validate([
+        'item_id' => 'required|exists:items,id'
+    ]);
+
+    $item = Item::find($request->item_id);
+
+    $items = Item::with(['variants','owner'])
+        ->where('subcategory_id', $item->subcategory_id)
+        ->where('id', '!=', $item->id)
+        ->where('status','active')
+        ->limit(6)
         ->get();
 
     return response()->json([
         'data' => $items
-    ], 200);
+    ]);
 }
 }

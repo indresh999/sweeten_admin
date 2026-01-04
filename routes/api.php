@@ -101,7 +101,8 @@ Route::get('/all-items/{id}', [ItemController::class, 'listByOwner']);
 Route::post('/item-status/{id}', [ItemController::class, 'toggleStatus']);
 
 Route::get('/items-by-subcategory', [ItemController::class, 'itemsBySubcategory']);
-
+// Route::get('/items/{item_id}/similar', [ItemController::class, 'similarItems']);
+Route::get('/items/similar', [ItemController::class, 'similarItems']);
 //orders
 Route::post('/orders/create', [OrderController::class, 'createOrder']);
 Route::put('/orders/update/{orderId}', [OrderController::class, 'updateOrder']);

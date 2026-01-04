@@ -7,9 +7,9 @@ if (!function_exists('addOrderTimeline')) {
     function addOrderTimeline(
         int $orderId,
         string $status,
-        string $message = null,
+        ?string $message = null,   // ✅ explicit nullable
         array $meta = []
-    ) {
+    ): void {
         DeliveryTimeline::create([
             'order_id'   => $orderId,
             'status'     => $status,
