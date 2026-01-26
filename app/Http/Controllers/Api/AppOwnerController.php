@@ -39,12 +39,19 @@ class AppOwnerController extends Controller
         }
 
         $data = $validator->validated();
+
+        // 🔐 PASSWORD HASH
+        $data['password'] = Hash::make($data['password']);
+
         $owner = AppOwnerUser::create($data);
 
-        return response()->json(['message' => 'Profile successfully', 'data' => $owner], 201);
+        return response()->json([
+            'message' => 'Profile successfully created',
+            'data' => $owner
+        ], 201);
     }
 
-    public function login(Request $request)
+   public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
@@ -62,10 +69,13 @@ class AppOwnerController extends Controller
         if (! $user) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
-        if (! Hash::check($credentials['password'], $user->password) && $user->password !== $credentials['password']) {
+
+        // 🔐 HASH PASSWORD CHECK
+        if (! Hash::check($credentials['password'], $user->password)) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
-        $user->makeHidden('password');
+
+        $user->makeHidden(['password']);
 
         return response()->json([
             'message' => 'Login successful',
@@ -78,20 +88,20 @@ class AppOwnerController extends Controller
         $owner = AppOwnerUser::findOrFail($id);
 
         $validator = Validator::make($request->all(), [
-            'full_name' => 'sometimes|required|string|max:100',
-            'email' => 'sometimes|required|email|unique:restaurant_owners,email,' . $id,
-            'password' => 'sometimes|nullable|string|min:6',
-            'phone_number' => 'nullable|string|max:20',
-            'restaurant_name' => 'sometimes|required|string|max:100',
-            'restaurant_address' => 'nullable|string',
-            'city' => 'nullable|string|max:50',
-            'state' => 'nullable|string|max:50',
-            'zip_code' => 'nullable|string|max:20',
-            'country' => 'nullable|string|max:50',
-            'latitude' => 'nullable|numeric',
-            'longitude' => 'nullable|numeric',
-            'gst_number' => 'nullable|string|max:20',
-            'pan_number' => 'nullable|string|max:20',
+            'full_name'           => 'sometimes|required|string|max:100',
+            'email'               => 'sometimes|required|email|unique:app_owner_shops,email,' . $id,
+            'password'            => 'sometimes|nullable|string|min:6',
+            'phone_number'        => 'nullable|string|max:20',
+            'restaurant_name'     => 'sometimes|required|string|max:100',
+            'restaurant_address'  => 'nullable|string',
+            'city'                => 'nullable|string|max:50',
+            'state'               => 'nullable|string|max:50',
+            'zip_code'            => 'nullable|string|max:20',
+            'country'             => 'nullable|string|max:50',
+            'latitude'            => 'nullable|numeric',
+            'longitude'           => 'nullable|numeric',
+            'gst_number'          => 'nullable|string|max:20',
+            'pan_number'          => 'nullable|string|max:20',
         ]);
 
         if ($validator->fails()) {
@@ -100,14 +110,20 @@ class AppOwnerController extends Controller
 
         $data = $validator->validated();
 
-        if (isset($data['password'])) {
-        //    $data['password'] = Hash::make($data['password']);
-            $data['password'] = $data['password'];
+        // 🔐 Hash password ONLY if provided
+        if (!empty($data['password'])) {
+            $data['password'] = Hash::make($data['password']);
+        } else {
+            unset($data['password']);
         }
 
         $owner->update($data);
+        $owner->makeHidden(['password']);
 
-        return response()->json(['message' => 'Restaurant owner updated successfully', 'data' => $owner], 200);
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'data'    => $owner
+        ], 200);
     }
 
     public function toggleStatus($id)
@@ -121,7 +137,7 @@ class AppOwnerController extends Controller
     public function uploadShopImage(Request $request)
     {
         $request->validate([
-            'shop_id' => 'required|exists:app_owner_shops,owner_id',
+            'shop_id' => 'required|exists:app_owner_shops,shop_id',
             'tag' => 'nullable|string|max:100',
             'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120', 
         ]);
@@ -244,36 +260,36 @@ class AppOwnerController extends Controller
         ], 200);
     }
 
- public function shopDashboard(Request $request)
-{
-    $shop_id = $request->shop_id; 
+    public function shopDashboard(Request $request)
+    {
+        $shop_id = $request->shop_id; 
 
-    if (!$shop_id) {
-        return response()->json(['message' => 'shop_id required'], 400);
+        if (!$shop_id) {
+            return response()->json(['message' => 'shop_id required'], 400);
+        }
+
+        // Total items
+        $totalItems = Item::where('shop_id', $shop_id)->count();
+
+        // Total orders
+        $totalOrders = Order::where('shop_id', $shop_id)->count();
+
+        // Pending orders (adjust statuses as per your system)
+        $pendingOrders = Order::where('shop_id', $shop_id)
+                            ->where('status', 'pending')
+                            ->count();
+
+        // Total earning (only completed orders)
+        $totalEarnings = Order::where('shop_id', $shop_id)
+                            ->where('status', 'completed')
+                            ->sum('final_amount');
+
+        return response()->json([
+            'shop_id'        => $shop_id,
+            'total_items'    => $totalItems,
+            'total_orders'   => $totalOrders,
+            'pending_orders' => $pendingOrders,
+            'total_earning'  => $totalEarnings,
+        ], 200);
     }
-
-    // Total items
-    $totalItems = Item::where('shop_id', $shop_id)->count();
-
-    // Total orders
-    $totalOrders = Order::where('shop_id', $shop_id)->count();
-
-    // Pending orders (adjust statuses as per your system)
-    $pendingOrders = Order::where('shop_id', $shop_id)
-                          ->where('status', 'pending')
-                          ->count();
-
-    // Total earning (only completed orders)
-    $totalEarnings = Order::where('shop_id', $shop_id)
-                          ->where('status', 'completed')
-                          ->sum('final_amount');
-
-    return response()->json([
-        'shop_id'        => $shop_id,
-        'total_items'    => $totalItems,
-        'total_orders'   => $totalOrders,
-        'pending_orders' => $pendingOrders,
-        'total_earning'  => $totalEarnings,
-    ], 200);
-}
 }
