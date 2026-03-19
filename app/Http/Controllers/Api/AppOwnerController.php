@@ -85,32 +85,34 @@ class AppOwnerController extends Controller
 
     public function update(Request $request, $id)
     {
-        $owner = AppOwnerUser::findOrFail($id);
-
+       $owner = AppOwnerUser::where('shop_id', $id)->firstOrFail();
+       
         $validator = Validator::make($request->all(), [
-            'full_name'           => 'sometimes|required|string|max:100',
-            'email'               => 'sometimes|required|email|unique:app_owner_shops,email,' . $id,
-            'password'            => 'sometimes|nullable|string|min:6',
-            'phone_number'        => 'nullable|string|max:20',
-            'restaurant_name'     => 'sometimes|required|string|max:100',
-            'restaurant_address'  => 'nullable|string',
-            'city'                => 'nullable|string|max:50',
-            'state'               => 'nullable|string|max:50',
-            'zip_code'            => 'nullable|string|max:20',
-            'country'             => 'nullable|string|max:50',
-            'latitude'            => 'nullable|numeric',
-            'longitude'           => 'nullable|numeric',
-            'gst_number'          => 'nullable|string|max:20',
-            'pan_number'          => 'nullable|string|max:20',
+            'full_name'          => 'sometimes|required|string|max:100',
+            'email' => 'sometimes|required|email|unique:app_owner_shops,email,' . $id . ',shop_id',
+            'password'           => 'sometimes|nullable|string|min:6',
+            'phone_number'       => 'nullable|string|max:20',
+            'restaurant_name'    => 'sometimes|required|string|max:100',
+            'restaurant_address' => 'nullable|string',
+            'city'               => 'nullable|string|max:50',
+            'state'              => 'nullable|string|max:50',
+            'zip_code'           => 'nullable|string|max:20',
+            'country'            => 'nullable|string|max:50',
+            'latitude'           => 'nullable|numeric',
+            'longitude'          => 'nullable|numeric',
+            'gst_number'         => 'nullable|string|max:20',
+            'pan_number'         => 'nullable|string|max:20',
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json([
+                'errors' => $validator->errors()
+            ], 422);
         }
 
         $data = $validator->validated();
 
-        // 🔐 Hash password ONLY if provided
+        // 🔐 Hash password only if provided
         if (!empty($data['password'])) {
             $data['password'] = Hash::make($data['password']);
         } else {

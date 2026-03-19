@@ -9,27 +9,73 @@ class Item extends Model
 {
     protected $appends = ['image_urls', 'default_variant'];
 
-    protected $fillable = [
-        'shop_id',
-        'category_id',
-        'subcategory_id',
-        'item_name',
-        'description',
-        'price',
-        'offer_price',
-        'min_quantity',
-        'weight_or_piece',
-        'gst_percent',
-        'status',
-        'images',
-        'cgst',
-        'sgst'
-    ];
+   protected $fillable = [
+    // Relations
+    'shop_id',
+    'category_id',
+    'subcategory_id',
+
+    // Core
+    'item_name',
+    'slug',
+    'description',
+    'item_type',
+    'status',
+
+    // Pricing & Tax
+    'price',
+    'offer_price',
+    'gst_percent',
+    'cgst',
+    'sgst',
+    'igst',
+    'hsn_code',
+    'cess_percent',
+    'is_tax_inclusive',
+
+    // Inventory
+    'sku',
+    'stock_quantity',
+    'track_inventory',
+    'low_stock_alert',
+    'min_quantity',
+    'max_quantity',
+
+    // Food specific
+    'is_veg',
+    'is_jain',
+    'spice_level',
+    'preparation_time',
+
+    // Media
+    'images',
+    'thumbnail_image',
+    'video_url',
+
+    // Display
+    'is_featured',
+    'display_order',
+    'badge',
+
+    // Analytics
+    'rating_avg',
+    'rating_count',
+    'total_sold',
+
+    // Misc
+    'weight_or_piece',
+    'allow_custom_notes',
+    'commission_percent',
+    'commission_type'
+];
 
     protected $casts = [
         'images' => 'array',
     ];
 
+
+    protected $hidden = ['images'];
+    
     /**
      * Return full image URLs
      */

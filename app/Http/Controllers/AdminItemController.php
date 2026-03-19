@@ -158,15 +158,31 @@ class AdminItemController extends Controller
             }
 
             // ---------- Update Item ----------
-            $item->update([
-                'shop_id'        => $request->owner_id,
-                'category_id'    => $request->category_id,
-                'subcategory_id' => $request->subcategory_id,
-                'item_name'      => $request->item_name,
-                'description'    => $request->description,
-                'status'         => $request->status ?? 'active',
-                'images'         => $images
-            ]);
+           $item->update([
+    'shop_id'        => $request->owner_id,
+    'category_id'    => $request->category_id,
+    'subcategory_id' => $request->subcategory_id,
+
+    'item_name'      => $request->item_name,
+    'description'    => $request->description,
+    'status'         => $request->status ?? 'active',
+
+    // 🔥 Pricing
+    'price'          => $request->price,
+    'offer_price'    => $request->offer_price,
+    'gst_percent'    => $request->gst_percent,
+    'hsn_code'       => $request->hsn_code,
+
+    // 🔥 Inventory
+    'sku'            => $request->sku,
+    'stock_quantity' => $request->stock_quantity,
+    'track_inventory'=> $request->track_inventory ?? 0,
+
+    // 🔥 Extra
+    'weight_or_piece'=> $request->weight_or_piece,
+
+    'images'         => $images
+]);
 
             // ---------- Variants Sync ----------
             $existingIds = $item->variants->pluck('id')->toArray();

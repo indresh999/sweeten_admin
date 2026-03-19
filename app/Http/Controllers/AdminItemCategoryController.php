@@ -14,7 +14,6 @@ class AdminItemCategoryController extends Controller
 {
     $query = ItemCategory::orderBy('id', 'desc');
 
-    // ✅ FILTER BY CATEGORY TYPE
     if ($request->filled('category_type')) {
         if ($request->category_type === 'birthday') {
             $query->where('category_type', 'birthday');
@@ -38,6 +37,8 @@ class AdminItemCategoryController extends Controller
         $request->validate([
             'category_name' => 'required|string|max:255',
             'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'hsn' => 'nullable|string|max:20',
+            'tax' => 'nullable|numeric|min:0',
         ]);
 
         $imagePath = null;
@@ -51,14 +52,16 @@ class AdminItemCategoryController extends Controller
             $imagePath = 'storage/' . $path;
         }
 
-      ItemCategory::create([
-            'category_name' => $request->category_name,
-            'description'   => $request->description,
-            'status'        => $request->status ?? 1,
-            'image'         => $imagePath,
-            'category_type' => $request->has('is_birthday') ? 'birthday' : null,
-            'is_featured'   => $request->has('is_featured') ? 1 : 0, // ✅ FEATURED
-        ]);
+        ItemCategory::create([
+                'category_name' => $request->category_name,
+                'description'   => $request->description,
+                'status'        => $request->status ?? 1,
+                'image'         => $imagePath,
+                'category_type' => $request->has('is_birthday') ? 'birthday' : null,
+                'is_featured'   => $request->has('is_featured') ? 1 : 0, 
+                'hsn'             => $request->hsn,
+                'tax'             => $request->tax
+            ]);
 
         return redirect()->route('admin.item-categories.index')
             ->with('success', 'Category created successfully.');
@@ -74,15 +77,17 @@ class AdminItemCategoryController extends Controller
         $request->validate([
             'category_name' => 'required|string|max:255',
             'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'hsn' => 'nullable|string|max:20',
+            'tax' => 'nullable|numeric|min:0'
         ]);
 
         $category = ItemCategory::findOrFail($id);
 
-        $imagePath = $category->getRawOriginal('image'); // 👈 IMPORTANT
+        $imagePath = $category->getRawOriginal('image'); 
 
         if ($request->hasFile('image')) {
 
-            // ✅ DELETE OLD IMAGE
+           
             if ($imagePath) {
                 Storage::disk('public')->delete(
                     str_replace('storage/', '', $imagePath)
@@ -101,9 +106,11 @@ class AdminItemCategoryController extends Controller
                 'category_name' => $request->category_name,
                 'description'   => $request->description,
                 'status'        => $request->status ?? 1,
-                'image'         => $imagePath ?? $category->image, // keep old image if not changed
+                'image'         => $imagePath ?? $category->image, 
                 'category_type' => $request->has('is_birthday') ? 'birthday' : null,
-                'is_featured'   => $request->has('is_featured') ? 1 : 0, // ✅ IMPORTANT
+                'is_featured'   => $request->has('is_featured') ? 1 : 0,
+                'hsn'           => $request->hsn,
+                'tax'           => $request->tax
             ]);
 
         return redirect()->route('admin.item-categories.index')

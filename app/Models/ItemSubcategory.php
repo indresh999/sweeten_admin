@@ -13,7 +13,11 @@ class ItemSubcategory extends Model
         'name',
         'description',
         'status',
-        'image'
+        'image',
+        'hsn',
+        'tax',
+        'commission_percent',
+        'commission_type'
     ];
 
     public function category()

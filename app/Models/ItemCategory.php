@@ -14,7 +14,11 @@ class ItemCategory extends Model
         'status',
         'image',
         'category_type',
-        'is_featured'
+        'is_featured',
+        'hsn',
+        'tax',
+        'commission_percent',
+        'commission_type'
     ];
 
     public function items()
@@ -25,5 +29,15 @@ class ItemCategory extends Model
     public function getImageAttribute($value)
     {
         return $value ? asset($value) : null;
+    }
+
+     public function parent()
+    {
+        return $this->belongsTo(ItemSubcategory::class, 'parent_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(ItemSubcategory::class, 'parent_id');
     }
 }

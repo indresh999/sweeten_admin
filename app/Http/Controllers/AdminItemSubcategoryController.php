@@ -28,15 +28,21 @@ class AdminItemSubcategoryController extends Controller
     public function create()
     {
         $categories = ItemCategory::where('status', 1)->get();
-        return view('item-subcategory.create', compact('categories'));
+
+        $subcategories = ItemSubcategory::whereNull('parent_id')->get();
+
+        return view('item-subcategory.create', compact('categories', 'subcategories'));
     }
 
-  public function store(Request $request)
+public function store(Request $request)
 {
     $request->validate([
         'category_id' => 'required|exists:item_categories,id',
         'name'        => 'required|string|max:255',
         'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+        'tax'         => 'nullable|numeric|min:0',
+        'hsn'         => 'nullable|string|max:20',
+        'parent_id'   => 'nullable|exists:item_subcategories,id'
     ]);
 
     $imagePath = null;
@@ -45,17 +51,30 @@ class AdminItemSubcategoryController extends Controller
         $file = $request->file('image');
         $filename = Str::uuid() . '.webp';
         $path = $file->storeAs('subcategories', $filename, 'public');
-
-        // ✅ RELATIVE PATH ONLY (SAME AS CATEGORY)
         $imagePath = 'storage/' . $path;
+    }
+
+    // ✅ Default values from request
+    $hsn = $request->hsn;
+    $tax = $request->tax;
+
+    // ✅ If parent selected and hsn empty → inherit
+    if ($request->parent_id && (!$hsn || !$tax)) {
+        $parent = ItemSubcategory::find($request->parent_id);
+
+        $hsn = $hsn ?: $parent->hsn;
+        $tax = $tax ?: $parent->tax;
     }
 
     ItemSubcategory::create([
         'category_id' => $request->category_id,
+        'parent_id'   => $request->parent_id,
         'name'        => $request->name,
         'description' => $request->description,
         'status'      => $request->status ?? 1,
         'image'       => $imagePath,
+        'tax'         => $tax,
+        'hsn'         => $hsn,
     ]);
 
     return redirect()
@@ -77,6 +96,8 @@ class AdminItemSubcategoryController extends Controller
         'category_id' => 'required|exists:item_categories,id',
         'name'        => 'required|string|max:255',
         'image'       => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+        'tax'         => 'nullable|numeric|min:0',
+        'hsn'         => 'nullable|string|max:20'
     ]);
 
     $subcategory = ItemSubcategory::findOrFail($id);
@@ -107,6 +128,8 @@ class AdminItemSubcategoryController extends Controller
         'description' => $request->description,
         'status'      => $request->status ?? 1,
         'image'       => $imagePath ?? $subcategory->image,
+        'tax'         => $request->tax,
+        'hsn'         => $request->hsn
     ]);
 
     return redirect()

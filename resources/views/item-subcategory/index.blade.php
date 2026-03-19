@@ -38,6 +38,9 @@
                             <th>Image</th>
                             <th>Name</th>
                             <th>Category</th>
+                            <th>Tax (%)</th>
+                            <th>HSN</th>
+                            <th>Commision</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -46,7 +49,7 @@
                     <tbody>
                         @foreach ($subcategories as $sub)
                             <tr>
-                                <td>{{ $sub->id }}</td>
+                                <td>{{ $loop->iteration }}</td>
                                 <td>
                                     @if ($sub->image)
                                         <img src="{{ $sub->image }}" style="width:60px;height:60px;object-fit:cover;">
@@ -54,14 +57,45 @@
                                 </td>
                                 <td>{{ $sub->name }}</td>
                                 <td>{{ $sub->category->category_name }}</td>
+
+                                <td>{{ $sub->tax ?? '0' }}%</td>
+                                <td>{{ $sub->hsn ?? '-' }}</td>
+
+                                <td>
+                                    @php
+                                        $commission = \App\Services\CommissionService::getCommissionDetails($sub);
+                                    @endphp
+
+                                    <span
+                                        class="badge 
+        {{ $commission['source'] == 'Item'
+            ? 'bg-success'
+            : ($commission['source'] == 'Subcategory'
+                ? 'bg-warning'
+                : ($commission['source'] == 'Category'
+                    ? 'bg-primary'
+                    : ($commission['source'] == 'Rule'
+                        ? 'bg-dark'
+                        : 'bg-secondary'))) }}"
+                                        data-bs-toggle="tooltip" title="Source: {{ $commission['source'] }}">
+
+                                        {{ $commission['type'] == 'percentage' ? $commission['value'] . '%' : '₹' . $commission['value'] }}
+
+                                        ({{ $commission['source'] }})
+                                    </span>
+                                </td>
                                 <td>
                                     <span class="badge bg-{{ $sub->status ? 'success' : 'danger' }}">
                                         {{ $sub->status ? 'Active' : 'Inactive' }}
                                     </span>
                                 </td>
                                 <td>
+                                    <a href="{{ url('admin/subcategory-commission/' . $sub->id) }}"
+                                        class="btn btn-sm btn-info">
+                                        Set Commission
+                                    </a>
                                     <a href="{{ route('admin.item-subcategories.edit', $sub->id) }}"
-                                        class="btn btn-warning btn-sm">Edit</a>
+                                        class="btn btn-primary btn-sm">Edit</a>
 
                                     <form method="POST"
                                         action="{{ route('admin.item-subcategories.destroy', $sub->id) }}"
@@ -71,7 +105,7 @@
                                         @csrf
                                         @method('DELETE')
 
-                                        <button class="btn btn-danger btn-sm">
+                                        <button class="btn btn-primary btn-sm">
                                             Delete
                                         </button>
                                     </form>

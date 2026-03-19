@@ -10,7 +10,6 @@
             <div class="card-body">
 
                 <form method="POST" action="{{ route('admin.item-categories.store') }}" enctype="multipart/form-data">
-
                     @csrf
 
                     <div class="mb-3">
@@ -18,21 +17,46 @@
                         <input type="text" name="category_name" class="form-control" required>
                     </div>
 
+
+                     <!-- HSN Code -->
+                    <div class="mb-3">
+                        <label>HSN Code</label>
+                        <input type="text" name="hsn" class="form-control"
+                            placeholder="Enter HSN Code (e.g. 1905)">
+                    </div>
+
+                    <!-- Tax Percentage -->
+                    <div class="mb-3">
+                        <label>Tax (%)</label>
+   
+                        <select name="tax" class="form-select">
+                            <option value="">Select Tax</option>
+                            <option value="0">0%</option>
+                            <option value="5">5%</option>
+                            <option value="12">12%</option>
+                            <option value="18">18%</option>
+                            <option value="28">28%</option>
+                        </select>
+                   
+
+                    </div>
                     <div class="mb-3">
                         <label>Description</label>
                         <textarea name="description" class="form-control"></textarea>
                     </div>
+                    
 
                     <div class="mb-3">
                         <label>Status</label>
-                        <select name="status" class="form-select">
+                        <select name="category_id" id="categorySelect" class="form-select" required>
                             <option value="1">Active</option>
                             <option value="0">Inactive</option>
                         </select>
                     </div>
+
+                    <!-- Category Type -->
                     <div class="mb-3">
                         <label class="form-label fw-bold">Category Type</label>
-
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" name="is_birthday" value="1"
                                 id="isBirthday">
@@ -40,13 +64,11 @@
                                 Birthday Category 🎂
                             </label>
                         </div>
-
-
                     </div>
 
+                    <!-- Featured -->
                     <div class="mb-3">
                         <label class="form-label fw-bold">Featured</label>
-
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" name="is_featured" value="1"
                                 id="isFeatured">
@@ -55,12 +77,14 @@
                             </label>
                         </div>
                     </div>
+
+                   
+
                     <!-- Image Upload -->
                     <div class="mb-3">
                         <label>Category Image</label>
                         <input type="file" id="imageInput" name="image" class="form-control" accept="image/*">
                     </div>
-
 
                     <!-- Preview Box -->
                     <div class="mb-3">

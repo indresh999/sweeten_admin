@@ -13,9 +13,12 @@ use App\Http\Controllers\DeliveryBoyAdminController;
 use App\Http\Controllers\AdminItemCategoryController;
 use App\Http\Controllers\AdminItemSubcategoryController;
 use App\Http\Controllers\AdminItemController;
+use App\Http\Controllers\Admin\AdminCommissionController;
 use Illuminate\Support\Facades\Artisan;
 // Packages
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\DeliveryChargeController;
+use App\Http\Controllers\Admin\PlatformFeeController;
 
 /*
 |--------------------------------------------------------------------------
@@ -34,6 +37,48 @@ Route::get('/storage', function () {
     Artisan::call('storage:link');
 });
 
+
+
+Route::prefix('admin')->group(function(){
+
+Route::get('delivery-charge',[DeliveryChargeController::class,'index'])->name('delivery-charge.index');
+
+Route::get('delivery-charge/create',[DeliveryChargeController::class,'create'])->name('delivery-charge.create');
+
+Route::post('delivery-charge/store',[DeliveryChargeController::class,'store'])->name('delivery-charge.store');
+
+Route::get('delivery-charge/edit/{id}',[DeliveryChargeController::class,'edit'])->name('delivery-charge.edit');
+
+Route::post('delivery-charge/update/{id}',[DeliveryChargeController::class,'update'])->name('delivery-charge.update');
+
+Route::get('delivery-charge/delete/{id}',[DeliveryChargeController::class,'destroy'])->name('delivery-charge.delete');
+
+});
+
+
+Route::prefix('admin')->group(function(){
+
+    Route::get('category-commission/{id}',
+    [AdminCommissionController::class,'editCategoryCommission']);
+
+    Route::post('category-commission/{id}',
+    [AdminCommissionController::class,'updateCategoryCommission'])
+    ->name('admin.category.commission.update');
+
+    Route::get('subcategory-commission/{id}',
+    [AdminCommissionController::class,'editSubcategoryCommission']);
+
+    Route::post('subcategory-commission/{id}',
+    [AdminCommissionController::class,'updateSubcategoryCommission'])
+    ->name('admin.subcategory.commission.update');
+
+    Route::get('item-commission/{id}',
+    [AdminCommissionController::class,'editItemCommission']);
+
+    Route::post('item-commission/{id}',
+    [AdminCommissionController::class,'updateItemCommission'])
+    ->name('admin.item.commission.update');
+});
 
 //Landing-Pages Routes
 Route::group(['prefix' => 'landing-pages'], function() {
@@ -165,6 +210,16 @@ Route::group(['prefix' => 'special-pages'], function() {
     Route::get('timeline', [HomeController::class, 'timeline'])->name('special-pages.timeline');
 });
 
+Route::prefix('admin')->group(function(){
+
+    Route::get('platform-fee', [PlatformFeeController::class,'index'])->name('platform-fee.index');
+    Route::get('platform-fee/create', [PlatformFeeController::class,'create'])->name('platform-fee.create');
+    Route::post('platform-fee/store', [PlatformFeeController::class,'store'])->name('platform-fee.store');
+    Route::get('platform-fee/edit/{id}', [PlatformFeeController::class,'edit'])->name('platform-fee.edit');
+    Route::post('platform-fee/update/{id}', [PlatformFeeController::class,'update'])->name('platform-fee.update');
+    Route::get('platform-fee/delete/{id}', [PlatformFeeController::class,'destroy'])->name('platform-fee.delete');
+
+});
 //Widget Routs
 Route::group(['prefix' => 'widget'], function() {
     Route::get('widget-basic', [HomeController::class, 'widgetbasic'])->name('widget.widgetbasic');
@@ -242,3 +297,20 @@ Route::group(['prefix' => 'icons'], function() {
 //Extra Page Routs
 Route::get('privacy-policy', [HomeController::class, 'privacypolicy'])->name('pages.privacy-policy');
 Route::get('terms-of-use', [HomeController::class, 'termsofuse'])->name('pages.term-of-use');
+
+
+Route::get('/admin/get-category-tax-hsn/{id}', function ($id) {
+    $category = \App\Models\ItemCategory::find($id);
+
+    return response()->json([
+        'hsn' => $category->hsn,
+        'tax' => $category->tax,
+    ]);
+});
+
+Route::get('/admin/get-subcategory-parents/{categoryId}', function ($categoryId) {
+    return \App\Models\ItemSubcategory::where('category_id', $categoryId)
+        ->whereNull('parent_id') // only top level
+        ->select('id','name')
+        ->get();
+});

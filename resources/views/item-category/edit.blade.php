@@ -34,9 +34,9 @@
                         </select>
                     </div>
 
+                    <!-- Category Type -->
                     <div class="mb-3">
                         <label class="form-label fw-bold">Category Type</label>
-
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" name="is_birthday" value="1"
                                 id="isBirthday" {{ $category->category_type === 'birthday' ? 'checked' : '' }}>
@@ -45,13 +45,38 @@
                             </label>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Featured </label>
 
-                        <input class="form-check-input" type="checkbox" name="is_featured" value="1"
-                            id="isFeatured" {{ $category->is_featured ? 'checked' : '' }}>
+                    <!-- Featured -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Featured</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="is_featured" value="1"
+                                id="isFeatured" {{ $category->is_featured ? 'checked' : '' }}>
+                            <label class="form-check-label" for="isFeatured">
+                                Make this category Featured ⭐
+                            </label>
+                        </div>
                     </div>
 
+                    <!-- HSN Code -->
+                    <div class="mb-3">
+                        <label>HSN Code</label>
+                        <input type="text" name="hsn" class="form-control" value="{{ $category->hsn }}"
+                            placeholder="Enter HSN Code">
+                    </div>
+
+                    <!-- Tax Percentage -->
+                    <div class="mb-3">
+                        <label>Tax (%)</label>
+                        <select name="tax" class="form-select">
+                            <option value="">Select Tax</option>
+                            <option value="0" {{ $category->tax == 0 ? 'selected' : '' }}>0%</option>
+                            <option value="5" {{ $category->tax == 5 ? 'selected' : '' }}>5%</option>
+                            <option value="12" {{ $category->tax == 12 ? 'selected' : '' }}>12%</option>
+                            <option value="18" {{ $category->tax == 18 ? 'selected' : '' }}>18%</option>
+                            <option value="28" {{ $category->tax == 28 ? 'selected' : '' }}>28%</option>
+                        </select>
+                    </div>
 
                     <!-- Image -->
                     <div class="mb-3">
@@ -68,10 +93,8 @@
                         </div>
                     </div>
 
-
                     <button class="btn btn-primary">Update</button>
                     <a href="{{ route('admin.item-categories.index') }}" class="btn btn-secondary">Cancel</a>
-
                 </form>
 
             </div>

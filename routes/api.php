@@ -77,7 +77,7 @@ Route::post('/auth/update-profile', [AuthController::class, 'updateProfile']);
 
 Route::post('/ownersignup', [AppOwnerController::class, 'store']);
 Route::post('/ownerlogin', [AppOwnerController::class, 'login']);
-Route::post('/ownerupdate/{id}', [AppOwnerController::class, 'update']);
+Route::put('/owner-update/{id}', [AppOwnerController::class, 'update']);
 Route::get('/shopdashboard', [AppOwnerController::class, 'shopDashboard']);
 
 Route::post('/shop/upload-image', [AppOwnerController::class, 'uploadShopImage']);
@@ -99,6 +99,7 @@ Route::post('/update-item/{id}', [ItemController::class, 'update']);
 Route::post('/delete-item/{id}', [ItemController::class, 'destroy']);
 Route::get('/all-items/{id}', [ItemController::class, 'listByOwner']);
 Route::post('/item-status/{id}', [ItemController::class, 'toggleStatus']);
+Route::get('/item/{id}', [ItemController::class, 'show']);
 
 Route::get('/items-by-subcategory', [ItemController::class, 'itemsBySubcategory']);
 // Route::get('/items/{item_id}/similar', [ItemController::class, 'similarItems']);

@@ -71,15 +71,37 @@
                                 <th>Category</th>
                                 <th>Subcategory</th>
                                 <th>Owner</th>
-                                <th>Price</th>
+
+                                <th>Base Price</th> {{-- NEW --}}
+                                <th>Offer Price</th> {{-- NEW --}}
+                                <th>Final Price</th> {{-- NEW --}}
+
                                 <th>GST %</th>
+                                <th>Commission</th>
+
+                                <th>Stock</th> {{-- NEW --}}
+                                <th>SKU</th> {{-- NEW --}}
+
                                 <th>Status</th>
                                 <th width="180">Actions</th>
                             </tr>
                         </thead>
 
                         <tbody class="text-center">
+
+                            
                             @forelse($items as $item)
+
+                            @php
+    $price = $item->offer_price ?? $item->price;
+
+    $commission = \App\Services\CommissionService::getCommissionDetails($item, $price);
+
+    $commissionAmount = \App\Services\CommissionService::calculateCommission($price, $commission);
+
+    $finalPrice = $price + $commissionAmount;
+@endphp
+
                                 @php
                                     $firstImage = $item->images[0] ?? null;
                                 @endphp
@@ -100,16 +122,63 @@
                                     <td>{{ $item->category->category_name ?? '-' }}</td>
                                     <td>{{ $item->subcategory->name ?? '-' }}</td>
                                     <td>{{ $item->owner->restaurant_name ?? '-' }}</td>
-                                    <td>₹{{ number_format($item->price, 2) }}</td>
-                                    <td>{{ $item->gst_percent ?? '-' }}</td>
 
+                                    {{-- BASE PRICE --}}
+                                    <td>₹{{ number_format($item->price, 2) }}</td>
+
+                                    {{-- OFFER PRICE --}}
+                                    <td>
+                                        @if ($item->offer_price)
+                                            ₹{{ number_format($item->offer_price, 2) }}
+                                        @else
+                                            <span class="text-muted">-</span>
+                                        @endif
+                                    </td>
+
+                                    {{-- FINAL PRICE --}}
+                                    <td>
+                                        <span class="fw-bold text-success">
+                                            ₹{{ number_format($finalPrice, 2) }}
+                                        </span>
+                                    </td>
+
+                                    {{-- GST --}}
+                                    <td>{{ $item->gst_percent ?? '-' }}%</td>
+
+                                    {{-- COMMISSION --}}
+                                    <td>
+                                        <span class="badge bg-success"
+                                            title="Amount: ₹{{ round($commissionAmount, 2) }}">
+                                            {{ $commission['type'] == 'percentage' ? $commission['value'] . '%' : '₹' . $commission['value'] }}
+                                        </span>
+                                    </td>
+
+                                    {{-- STOCK --}}
+                                    <td>
+                                        @if ($item->track_inventory)
+                                            {{ $item->stock_quantity ?? 0 }}
+                                        @else
+                                            <span class="text-muted">∞</span>
+                                        @endif
+                                    </td>
+
+                                    {{-- SKU --}}
+                                    <td>{{ $item->sku ?? '-' }}</td>
+
+                                    {{-- STATUS --}}
                                     <td>
                                         <span class="badge bg-{{ $item->status ? 'success' : 'danger' }}">
                                             {{ $item->status ? 'Active' : 'Inactive' }}
                                         </span>
                                     </td>
 
+                                    {{-- ACTIONS --}}
                                     <td>
+                                        <a href="{{ url('admin/item-commission/' . $item->id) }}"
+                                            class="btn btn-sm btn-warning">
+                                            ⚙
+                                        </a>
+
                                         <a href="{{ route('admin.items.show', $item->id) }}"
                                             class="btn btn-sm btn-info mb-1">View</a>
 

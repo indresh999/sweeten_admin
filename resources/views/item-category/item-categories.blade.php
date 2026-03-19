@@ -26,71 +26,105 @@
                         </select>
                     </div>
                 </form>
-                <table class="table table-bordered text-center">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>#</th>
-                            <th>Image</th>
-                            <th>Name</th>
-                            <th>Description</th>
-                            <th>Category Type</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                    <tbody>
-                        @foreach ($categories as $cat)
+                <div class="table-responsive">
+                    <table class="table table-bordered text-center align-middle">
+                        <thead class="table-dark">
                             <tr>
-                                <td>{{ $cat->id }}</td>
-
-                                <!-- Image -->
-                                <td>
-                                    @if ($cat->image)
-                                        <img src="{{ $cat->image }}" alt="{{ $cat->category_name }}"
-                                            style="width:60px;height:60px;object-fit:cover;border-radius:6px;">
-                                    @else
-                                        <span class="text-muted">No Image</span>
-                                    @endif
-                                </td>
-
-                                <td>{{ $cat->category_name }}</td>
-                                <td>{{ $cat->description }}</td>
-                                <td>
-                                    @if ($cat->category_type === 'birthday')
-                                        <span class="badge bg-info">Birthday 🎂</span>
-                                    @else
-                                        <span class="badge bg-secondary">Normal</span>
-                                    @endif
-                                </td>
-                                <td>
-                                    <span class="badge bg-{{ $cat->status ? 'success' : 'danger' }}">
-                                        {{ $cat->status ? 'Active' : 'Inactive' }}
-                                    </span>
-                                </td>
-
-                                <td>
-                                    <a href="{{ route('admin.item-categories.edit', $cat->id) }}"
-                                        class="btn btn-warning btn-sm">Edit</a>
-
-                                    <form action="{{ route('admin.item-categories.destroy', $cat->id) }}"
-                                        method="POST" class="d-inline"
-                                        onsubmit="return confirm('Are you sure you want to {{ $cat->status ? 'deactivate' : 'activate' }} this category?')">
-
-                                        @csrf
-                                        @method('DELETE')
-
-                                        <button class="btn btn-secondary btn-sm">
-                                            {{ $cat->status ? 'Deactivate' : 'Activate' }}
-                                        </button>
-                                    </form>
-                                </td>
+                                <th>#</th>
+                                <th>Image</th>
+                                <th>Name</th>
+                                <th>Tax (%)</th>
+                                <th>HSN Code</th>
+                                <th>Description</th>
+                                <th>Category Type</th>
+                                <th>Status</th>
+                                <th>Commission</th>
+                                <th>Actions</th>
                             </tr>
-                        @endforeach
-                    </tbody>
-                    </tbody>
-                </table>
+                        </thead>
+
+                        <tbody>
+                            @foreach ($categories as $cat)
+                                <tr>
+                                    <td>{{ $loop->iteration }}</td>
+
+                                    <td>
+                                        @if ($cat->image)
+                                            <img src="{{ $cat->image }}" alt="{{ $cat->category_name }}"
+                                                style="width:60px;height:60px;object-fit:cover;border-radius:6px;">
+                                        @else
+                                            <span class="text-muted">No Image</span>
+                                        @endif
+                                    </td>
+
+                                    <td>{{ $cat->category_name }}</td>
+                                    <td>{{ $cat->tax ?? '0' }}%</td>
+                                    <td>{{ $cat->hsn ?? '-' }}</td>
+                                    <td
+                                        style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                        {{ $cat->description }}
+                                    </td>
+
+                                    <td>
+                                        @if ($cat->category_type === 'birthday')
+                                            <span class="badge bg-info">Birthday 🎂</span>
+                                        @else
+                                            <span class="badge bg-secondary">Normal</span>
+                                        @endif
+                                    </td>
+
+                                    <td>
+                                        <span class="badge bg-{{ $cat->status ? 'success' : 'danger' }}">
+                                            {{ $cat->status ? 'Active' : 'Inactive' }}
+                                        </span>
+                                    </td>
+
+                                    <td>
+                                        @php
+                                            $commission = \App\Services\CommissionService::getCommissionDetails($cat);
+                                        @endphp
+
+                                        <span
+                                            class="badge 
+        {{ $commission['source'] == 'Category'
+            ? 'bg-success'
+            : ($commission['source'] == 'Rule'
+                ? 'bg-dark'
+                : 'bg-secondary') }}"
+                                            data-bs-toggle="tooltip" title="Source: {{ $commission['source'] }}">
+
+                                            {{ $commission['type'] == 'percentage' ? $commission['value'] . '%' : '₹' . $commission['value'] }}
+
+                                            ({{ $commission['source'] }})
+                                        </span>
+                                    </td>
+
+                                    <td>
+
+
+                                        <a href="{{ url('admin/category-commission/' . $cat->id) }}"
+                                            class="btn btn-sm btn-primary">
+                                            Set Commission
+                                        </a>
+
+                                        <a href="{{ route('admin.item-categories.edit', $cat->id) }}"
+                                            class="btn btn-primary btn-sm">Edit</a>
+
+                                        <form action="{{ route('admin.item-categories.destroy', $cat->id) }}"
+                                            method="POST" class="d-inline" onsubmit="return confirm('Are you sure?')">
+                                            @csrf
+                                            @method('DELETE')
+
+                                            <button class="btn btn-primary btn-sm">
+                                                {{ $cat->status ? 'Deactivate' : 'Activate' }}
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
 
                 {{ $categories->links('pagination::bootstrap-5') }}
 

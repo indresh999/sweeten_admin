@@ -55,11 +55,52 @@
                             <input name="item_name" value="{{ $item->item_name }}" class="form-control" required>
                         </div>
 
+
+                        {{-- PRICE --}}
+<div class="col-md-4 mb-3">
+    <label class="fw-bold">Price</label>
+    <input type="number" step="0.01" name="price"
+           value="{{ $item->price }}" class="form-control">
+</div>
+
+{{-- OFFER PRICE --}}
+<div class="col-md-4 mb-3">
+    <label class="fw-bold">Offer Price</label>
+    <input type="number" step="0.01" name="offer_price"
+           value="{{ $item->offer_price }}" class="form-control">
+</div>
+
+{{-- GST --}}
+<div class="col-md-4 mb-3">
+    <label class="fw-bold">GST %</label>
+    <input type="number" step="0.01" name="gst_percent"
+           value="{{ $item->gst_percent }}" class="form-control">
+</div>
+
                         {{-- DESCRIPTION --}}
                         <div class="col-md-12 mb-3">
                             <label class="fw-bold">Description</label>
                             <textarea name="description" rows="3" class="form-control">{{ $item->description }}</textarea>
                         </div>
+
+                        {{-- HSN --}}
+<div class="col-md-4 mb-3">
+    <label class="fw-bold">HSN Code</label>
+    <input name="hsn_code" value="{{ $item->hsn_code }}" class="form-control">
+</div>
+
+{{-- SKU --}}
+<div class="col-md-4 mb-3">
+    <label class="fw-bold">SKU</label>
+    <input name="sku" value="{{ $item->sku }}" class="form-control">
+</div>
+
+{{-- STOCK --}}
+<div class="col-md-4 mb-3">
+    <label class="fw-bold">Stock</label>
+    <input type="number" name="stock_quantity"
+           value="{{ $item->stock_quantity }}" class="form-control">
+</div>
 
                         {{-- EXISTING IMAGES --}}
                         <div class="col-md-12 mb-3">
