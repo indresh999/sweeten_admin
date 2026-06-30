@@ -1,4 +1,5 @@
 <x-app-layout>
+@php $sub = null; @endphp
 
     <!-- ================= CSS ================= -->
 
@@ -154,14 +155,15 @@
                 }
 
                 // Auto fill HSN & Tax
-                fetch('/admin/get-category-tax-hsn/' + categoryId)
+                fetch('/admin/categories/' + categoryId + '/tax-hsn')
+
                     .then(response => response.json())
                     .then(data => {
                         $('#hsnInput').val(data.hsn ?? '');
                         $('#taxSelect').val(data.tax ?? '');
                     });
                 // Load Parent Subcategories
-                fetch('/admin/get-subcategory-parents/' + categoryId)
+               fetch('/admin/categories/' + categoryId + '/subcategory-parents')
                     .then(response => response.json())
                     .then(data => {
 

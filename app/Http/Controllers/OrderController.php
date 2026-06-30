@@ -15,178 +15,120 @@ use App\Models\CancelReason;
 
 class OrderController extends Controller
 {
-
-    private function calculateDistance($lat1, $lng1, $lat2, $lng2)
+    // ── Haversine distance ─────────────────────────────────
+    private function calculateDistance($lat1, $lng1, $lat2, $lng2): float
     {
-        $earthRadius = 6371;
-
+        $R    = 6371;
         $dLat = deg2rad($lat2 - $lat1);
         $dLng = deg2rad($lng2 - $lng1);
-
-        $a = sin($dLat/2) * sin($dLat/2) +
-            cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-            sin($dLng/2) * sin($dLng/2);
-
-        $c = 2 * atan2(sqrt($a), sqrt(1-$a));
-        return $earthRadius * $c;
+        $a    = sin($dLat / 2) ** 2 +
+                cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+                sin($dLng / 2) ** 2;
+        return $R * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 
-
-    public function getDeliveryCharge($distance)
+    private function getDeliveryCharge(float $distance): float
     {
-        return \DB::table('delivery_charges')
+        return DB::table('delivery_charges')
             ->where('status', 1)
             ->where('min_distance', '<=', $distance)
             ->where('max_distance', '>=', $distance)
-            ->orderBy('priority', 'desc')
-            ->value('charge_amount') ?? 0;
+            ->orderByDesc('priority')
+            ->value('charge_amount') ?? 30;
     }
 
-   public function getGST($orderAmount = null)
+    private function getPlatformFees(): object
     {
-        $query = \DB::table('gst_settings')
-            ->where('status', 1)
-            ->orderBy('priority', 'desc');
-
-        if ($orderAmount) {
-            $query->where(function ($q) use ($orderAmount) {
-                $q->whereNull('min_order_amount')
-                ->orWhere('min_order_amount', '<=', $orderAmount);
-            });
-        }
-
-        return $query->value('gst_percent') ?? 0;
+        return DB::table('platform_fees')->where('status', 1)->orderByDesc('priority')->first()
+            ?? (object)['handling_fee' => 0, 'packing_fee' => 0];
     }
 
-    public function getPlatformFees($orderAmount = null)
+    private function addTimeline(int $orderId, string $status, ?string $message = null): void
     {
-        $query = \DB::table('platform_fees')
-            ->where('status', 1)
-            ->orderBy('priority', 'desc');
-
-        if ($orderAmount) {
-            $query->where(function ($q) use ($orderAmount) {
-                $q->whereNull('min_order_amount')
-                ->orWhere('min_order_amount', '<=', $orderAmount);
-            });
-        }
-
-        return $query->first() ?? (object)[
-            'handling_fee' => 0,
-            'packing_fee'  => 0,
-        ];
-    }
-    protected function validateOrderData(Request $request, $isUpdate = false)
-    {
-        $rules = [
-            'user_id' => 'required|integer|exists:app_users,id',
-            'shop_id' => 'required|integer|exists:app_owner_shops,shop_id',
-            'address_id' => 'required|integer|exists:user_addresses,id',
-
-            'items' => 'required|array|min:1',
-            'items.*.item_id' => 'required|integer|exists:items,id',
-            'items.*.quantity' => 'required|integer|min:1',
-            'items.*.price' => 'required|numeric|min:0',
-            'items.*.offer_price' => 'nullable|numeric|min:0'
-        ];
-
-        if ($isUpdate) {
-            unset($rules['user_id'], $rules['shop_id'], $rules['address_id']);
-        }
-
-        $validator = Validator::make($request->all(), $rules);
-
-        if ($validator->fails()) {
-            abort(response()->json([
-                'status' => false,
-                'errors' => $validator->errors()
-            ], 422));
-        }
-
-        return $validator->validated();
-    }
- 
-    private function addTimeline($order_id, $status, $message = null)
-    {
-        \DB::table('delivery_timeline')->insert([
-            'order_id' => $order_id,
-            'status' => $status,
-            'message' => $message,
-            'created_at' => now()
+        DB::table('delivery_timeline')->insert([
+            'order_id'   => $orderId,
+            'status'     => $status,
+            'message'    => $message,
+            'created_at' => now(),
         ]);
     }
+
+    // ── Create Order (POST /orders) ────────────────────────
     public function createOrder(Request $request)
     {
-        $request->validate([
-            'user_id'    => 'required|exists:users,id',
-            'shop_id'    => 'required',
-            'address_id'=> 'required|exists:user_addresses,id',
+        $validator = Validator::make($request->all(), [
+            'user_id'        => 'required|integer|exists:app_users,id',  // Fixed: app_users not users
+            'shop_id'        => 'required|integer|exists:app_owner_shops,shop_id',
+            'address_id'     => 'required|integer|exists:user_addresses,id',
+            'payment_method' => 'nullable|string|in:cod,online,wallet',
+            'coupon_code'    => 'nullable|string',
         ]);
 
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
+
         DB::beginTransaction();
-
         try {
-
-            /* ----------------------------------------------------
-             | 1. Fetch Address (Snapshot)
-             ---------------------------------------------------- */
+            // 1. Address snapshot
             $address = UserAddress::where('id', $request->address_id)
                 ->where('user_id', $request->user_id)
                 ->firstOrFail();
 
-            /* ----------------------------------------------------
-             | 2. Fetch Cart Items
-             ---------------------------------------------------- */
-            $cartItems = CartItem::with('item')
+            // 2. Cart items
+            $cartItems = CartItem::with(['item', 'variant'])
                 ->where('user_id', $request->user_id)
                 ->where('owner_id', $request->shop_id)
                 ->get();
 
             if ($cartItems->isEmpty()) {
-                throw new \Exception('Cart is empty');
+                throw new \Exception('Cart is empty for this shop');
             }
 
-            /* ----------------------------------------------------
-             | 3. Fetch Shop Location
-             ---------------------------------------------------- */
+            // 3. Shop location
             $shop = AppOwnerUser::where('shop_id', $request->shop_id)->firstOrFail();
 
-            /* ----------------------------------------------------
-             | 4. Calculate Item Total
-             ---------------------------------------------------- */
+            // 4. Item total
             $totalAmount = 0;
-
             foreach ($cartItems as $cart) {
-                $price = $cart->item->offer_price ?? $cart->item->price;
-                $totalAmount += ($price * $cart->quantity);
+                $price        = $cart->variant
+                    ? ($cart->variant->offer_price ?? $cart->variant->price)
+                    : ($cart->item->offer_price   ?? $cart->item->price ?? $cart->price);
+                $totalAmount += $price * $cart->quantity;
             }
 
-            /* ----------------------------------------------------
-             | 5. Distance & Charges
-             ---------------------------------------------------- */
-            $distance = $this->calculateDistance(
-                $address->lat,
-                $address->lng,
-                $shop->latitude,
-                $shop->longitude
-            );
+            // 5. Charges
+            $distance       = $this->calculateDistance($address->lat, $address->lng, $shop->latitude, $shop->longitude);
+            $deliveryCharge = $totalAmount >= 499 ? 0 : $this->getDeliveryCharge($distance);
+            $fees           = $this->getPlatformFees();
+            $handlingFee    = $fees->handling_fee ?? 0;
+            $packingFee     = $fees->packing_fee  ?? 0;
 
-            $deliveryCharge = $this->getDeliveryCharge($distance);
-            $fees = $this->getPlatformFees();
-            $handlingFee = $fees->handling_fee ?? 0;
-            $packingFee  = $fees->packing_fee ?? 0;
-
-            /* ----------------------------------------------------
-             | 6. GST
-             ---------------------------------------------------- */
-            $gstPercent = $this->getGST();
-            $taxAmount = ($totalAmount * $gstPercent) / 100;
-
+            // 6. GST
+            $gstPercent  = DB::table('gst_settings')->where('status', 1)->orderByDesc('priority')->value('gst_percent') ?? 0;
+            $taxAmount   = ($totalAmount * $gstPercent) / 100;
             $finalAmount = $totalAmount + $taxAmount + $deliveryCharge + $handlingFee + $packingFee;
 
-            /* ----------------------------------------------------
-             | 7. Create Order
-             ---------------------------------------------------- */
+            // 7. Coupon discount
+            $couponDiscount = 0;
+            if ($request->coupon_code) {
+                $coupon = DB::table('coupons')
+                    ->where('code', strtoupper($request->coupon_code))
+                    ->where('status', 'active')
+                    ->where(fn($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>=', now()))
+                    ->first();
+                if ($coupon) {
+                    $couponDiscount = $coupon->discount_type === 'percent'
+                        ? ($totalAmount * $coupon->discount_value / 100)
+                        : $coupon->discount_value;
+                    if ($coupon->max_discount && $couponDiscount > $coupon->max_discount) {
+                        $couponDiscount = $coupon->max_discount;
+                    }
+                    $finalAmount = max(0, $finalAmount - $couponDiscount);
+                }
+            }
+
+            // 8. Create order
             $order = Order::create([
                 'user_id'         => $request->user_id,
                 'shop_id'         => $request->shop_id,
@@ -196,9 +138,10 @@ class OrderController extends Controller
                 'delivery_charge' => $deliveryCharge,
                 'handling_fee'    => $handlingFee,
                 'packing_fee'     => $packingFee,
+                'coupon_discount' => $couponDiscount,
                 'final_amount'    => $finalAmount,
+                'payment_method'  => $request->payment_method ?? 'cod',
                 'status'          => 'pending',
-
                 // Address snapshot
                 'address_label'   => $address->label,
                 'address_line'    => $address->address_line,
@@ -209,30 +152,30 @@ class OrderController extends Controller
                 'lng'             => $address->lng,
             ]);
 
-            /* ----------------------------------------------------
-             | 8. Create Order Items (Snapshot)
-             ---------------------------------------------------- */
+            // 9. Order items snapshot
             foreach ($cartItems as $cart) {
+                $item      = $cart->item;
+                $variant   = $cart->variant;
+                $unitPrice = $variant
+                    ? ($variant->offer_price ?? $variant->price)
+                    : ($item->offer_price    ?? $item->price);
 
-                $item = $cart->item;
-                $unitPrice = $item->offer_price ?? $item->price;
-
-                $itemSnapshot = [
-                    'item_id'         => $item->id,
-                    'name'            => $item->item_name,
-                    'description'     => $item->description,
-                    'image'           => $item->image,
-                    'price'           => $item->price,
-                    'offer_price'     => $item->offer_price,
-                    'category_id'     => $item->category_id,
-                    'subcategory_id'  => $item->subcategory_id,
-                    'gst_percent'     => $item->gst_percent,
-                ];
+                $images = is_array($item->images)
+                    ? $item->images
+                    : (json_decode($item->images, true) ?? []);
 
                 OrderItem::create([
                     'order_id'    => $order->id,
                     'item_id'     => $item->id,
-                    'item'        => $itemSnapshot, // JSON snapshot
+                    'variant_id'  => $variant?->id,
+                    'item'        => json_encode([
+                        'name'        => $item->item_name,
+                        'description' => $item->description,
+                        'images'      => $images,
+                        'price'       => $item->price,
+                        'offer_price' => $item->offer_price,
+                        'variant'     => $variant ? ['id' => $variant->id, 'label' => $variant->label] : null,
+                    ]),
                     'quantity'    => $cart->quantity,
                     'price'       => $item->price,
                     'offer_price' => $item->offer_price,
@@ -240,175 +183,117 @@ class OrderController extends Controller
                 ]);
             }
 
-            /* ----------------------------------------------------
-             | 9. Clear Cart
-             ---------------------------------------------------- */
+            // 10. Clear cart
             CartItem::where('user_id', $request->user_id)
                 ->where('owner_id', $request->shop_id)
                 ->delete();
+
+            // 11. Timeline
+            $this->addTimeline($order->id, 'pending', 'Order placed');
 
             DB::commit();
 
             return response()->json([
                 'status'  => true,
-                'message' => 'Order created successfully',
-                'data'    => $order->load('items')
+                'message' => 'Order placed successfully',
+                'data'    => $order->load('items'),
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'status' => false,
-                'error'  => $e->getMessage()
-            ], 500);
+            return response()->json(['status' => false, 'error' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Update / Modify an existing order
-     */
-    public function updateOrder(Request $request, $orderId)
-    {
-        $validated = $this->validateOrderData($request, true);
-
-        DB::beginTransaction();
-
-        try {
-            $order = Order::where('id', $orderId)->where('status', 'pending')->firstOrFail();
-
-            // Delete old items
-            $order->items()->delete();
-
-            // Recreate new items
-            foreach ($validated['items'] as $itemData) {
-                $order->items()->create($itemData);
-            }
-
-            // Recalculate total
-            $totalAmount = collect($validated['items'])->sum(function ($item) {
-                return ($item['offer_price'] ?? $item['price']) * $item['quantity'];
-            });
-
-            $order->update(['total_amount' => $totalAmount]);
-
-            DB::commit();
-
-            return response()->json([
-                'message' => 'Order updated successfully.',
-                'data' => $order->load('items.item', 'owner')
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * Cancel an order
-     */
-   public function cancelOrder(Request $request, $orderId)
-{
-    $validated = $request->validate([
-        'cancel_reason_id' => 'required|integer|exists:cancel_reasons,id',
-        'cancel_remark' => 'nullable|string|max:500'
-    ]);
-
-    try {
-        $order = Order::where('id', $orderId)
-            ->where('status', '!=', 'cancelled')
-            ->firstOrFail();
-
-        $order->update([
-            'status' => 'cancelled',
-            'cancel_reason_id' => $validated['cancel_reason_id'],
-            'cancel_remark' => $validated['cancel_remark'] ?? null
-        ]);
-
-        return response()->json([
-            'message' => 'Order cancelled successfully.',
-            'data' => $order->load('cancelReason')
-        ], 200);
-    } catch (\Exception $e) {
-        return response()->json(['error' => 'Order not found or already cancelled.'], 404);
-    }
-}
-
-    /**
-     * List user orders
-     */
+    // ── List orders (GET /orders?user_id=X&status=Y) ───────
     public function listUserOrders(Request $request)
     {
-        $userId   = $request->user_id;
-        $shopId   = $request->shop_id; 
-        $status   = $request->status;
-        $fromDate = $request->from_date;  // YYYY-MM-DD
-        $toDate   = $request->to_date;    // YYYY-MM-DD
+        $query = Order::with(['items', 'owner:shop_id,restaurant_name,restaurant_address,city'])
+            ->orderByDesc('created_at');
 
-        $query = Order::with(['items.item', 'owner'])
-            ->orderBy('created_at', 'desc');
+        if ($request->user_id) $query->where('user_id', $request->user_id);
+        if ($request->shop_id) $query->where('shop_id', $request->shop_id);
+        if ($request->status)  $query->where('status',  $request->status);
 
-        // Customer orders
-        if ($userId) {
-            $query->where('user_id', $userId);
-        }
-
-        // Shop owner orders
-        if ($shopId) {
-            $query->where('shop_id', $shopId);
-        }
-
-        // Filter by status
-        if (!empty($status)) {
-            $query->where('status', $status);
-        }
-
-        // Filter by date range
-        if ($fromDate && $toDate) {
-            $query->whereBetween('created_at', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59']);
-        } 
-        else if ($fromDate) {
-            $query->whereDate('created_at', '>=', $fromDate);
-        } 
-        else if ($toDate) {
-            $query->whereDate('created_at', '<=', $toDate);
+        if ($request->from_date && $request->to_date) {
+            $query->whereBetween('created_at', [$request->from_date.' 00:00:00', $request->to_date.' 23:59:59']);
         }
 
         $orders = $query->get();
 
-        return response()->json([
-            'data' => $orders
-        ], 200);
+        return response()->json(['status' => true, 'data' => $orders]);
     }
 
-    public function getCancelReasons()
-    {
-        $reasons = CancelReason::
-          select('id', 'reason')
-            ->orderBy('id')
-            ->get();
-
-        return response()->json([
-            'status' => true,
-            'data' => $reasons
-        ], 200);
-    }
-
+    // ── Single order (GET /orders/{id}) ────────────────────
     public function getOrderById(Request $request, $id)
     {
-        $order = Order::with(['items.item', 'owner'])
-            ->where('id', $id)
+        $order = Order::with(['items', 'owner:shop_id,restaurant_name,city'])->find($id);
+
+        if (!$order) {
+            return response()->json(['status' => false, 'message' => 'Order not found'], 404);
+        }
+
+        return response()->json(['status' => true, 'data' => $order]);
+    }
+
+    // ── Cancel order (POST /orders/{id}/cancel) ─────────────
+    public function cancelOrder(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'cancel_reason_id' => 'required|integer|exists:cancel_reasons,id',
+            'cancel_remark'    => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
+
+        $order = Order::where('id', $id)
+            ->whereIn('status', ['pending', 'confirmed'])
             ->first();
 
         if (!$order) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Order not found'
-            ], 404);
+            return response()->json(['status' => false, 'message' => 'Order cannot be cancelled'], 400);
         }
 
+        $order->update([
+            'status'           => 'cancelled',
+            'cancel_reason_id' => $request->cancel_reason_id,
+            'cancel_remark'    => $request->cancel_remark,
+        ]);
+
+        $this->addTimeline($order->id, 'cancelled', 'Order cancelled by user');
+
         return response()->json([
-            'status' => true,
-            'data' => $order
-        ], 200);
+            'status'  => true,
+            'message' => 'Order cancelled',
+            'data'    => $order->fresh(),
+        ]);
+    }
+
+    // ── Cancel reasons ─────────────────────────────────────
+    public function getCancelReasons()
+    {
+        $reasons = CancelReason::select('id', 'reason')->orderBy('id')->get();
+        return response()->json(['status' => true, 'data' => $reasons]);
+    }
+
+    // ── Update order ───────────────────────────────────────
+    public function updateOrder(Request $request, $orderId)
+    {
+        $order = Order::where('id', $orderId)->where('status', 'pending')->firstOrFail();
+        $order->items()->delete();
+
+        foreach ($request->items ?? [] as $itemData) {
+            $order->items()->create($itemData);
+        }
+
+        $totalAmount = collect($request->items ?? [])->sum(
+            fn($i) => (($i['offer_price'] ?? null) ?: ($i['price'] ?? 0)) * ($i['quantity'] ?? 1)
+        );
+
+        $order->update(['total_amount' => $totalAmount]);
+
+        return response()->json(['status' => true, 'message' => 'Order updated', 'data' => $order->load('items')]);
     }
 }

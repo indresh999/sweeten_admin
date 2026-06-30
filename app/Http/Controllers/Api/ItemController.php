@@ -3,491 +3,375 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Item;
-use App\Models\ItemVariant;
-use App\Models\ItemSubcategory;
-use App\Models\AppHomeFilter;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+use App\Models\Item;
+use App\Models\ItemVariant;
+use App\Models\AppHomeFilter;
 use App\Services\CommissionService;
 
 class ItemController extends Controller
 {
-    
-    // ======================================================
-    // LIST ITEMS BY OWNER
-    // ======================================================
-    public function listByOwner(Request $request, $shop_id)
+    // ── List by Owner ──────────────────────────────────────
+    public function listByOwner(Request $request, int $shopId): JsonResponse
     {
-        
-        $perPage = $request->get('per_page', 15);
+        $perPage = (int) $request->get('per_page', 20);
 
         $items = Item::with([
-                'category:id,category_name',
-                'subcategory:id,name',
-                'variants' => function ($q) {
-                    $q->where('status', 'active')
-                    ->select([
-                        'id',
-                        'item_id',
-                        'label',
-                        'price',
-                        'offer_price',
-                        'gst_percent',
-                        'cgst',
-                        'sgst',
-                        'igst',
-                        'hsn_code',
-                        'is_default',
-                        'status'
-                    ]);
-                },
-                'defaultVariant:id,item_id,label,price,offer_price,gst_percent,hsn_code,is_default'
-            ])
-         //   ->where('shop_id', $shop_id)
-            ->select([
-                'id',
-                'shop_id',
-                'category_id',
-                'subcategory_id',
-                'item_name',
-                'description',
-                'status',
-                'images',
-                'weight_or_piece',
-                'created_at'
-            ])
-            ->latest()
-            ->paginate($perPage);
+            'category:id,category_name',
+            'subcategory:id,name',
+            'variants' => fn($q) => $q->where('status', 'active')
+                ->select(['id', 'item_id', 'label', 'price', 'offer_price', 'gst_percent', 'is_default', 'status']),
+        ])
+        ->where('shop_id', $shopId)
+        ->latest()
+        ->paginate($perPage);
 
-            $items->getCollection()->transform(function ($item) {
-                return $this->applyCommissionToVariants($item);
-            });
+        $items->getCollection()->transform(fn($item) => $this->appendImageUrls($item));
+
+        return response()->json(['status' => true, 'data' => $items]);
+    }
+
+    // ── Show Single Item ───────────────────────────────────
+    public function show(int $id): JsonResponse
+    {
+        $item = Item::with([
+            'category:id,category_name',
+            'subcategory:id,name',
+            'variants'       => fn($q) => $q->where('status', 'active')->orderByDesc('is_default'),
+            'owner:shop_id,restaurant_name,city,status',
+        ])->find($id);
+
+        if (!$item) {
+            return response()->json(['status' => false, 'message' => 'Item not found.'], 404);
+        }
+
+        $item = $this->applyCommission($this->appendImageUrls($item));
+        $default = $item->variants->firstWhere('is_default', true) ?? $item->variants->first();
 
         return response()->json([
             'status' => true,
-            'data'   => $items
-            
+            'data'   => [
+                'id'               => $item->id,
+                'shop_id'          => $item->shop_id,
+                'item_name'        => $item->item_name,
+                'description'      => $item->description,
+                'status'           => $item->status,
+                'is_veg'           => (bool) $item->is_veg,
+                'is_jain'          => (bool) $item->is_jain,
+                'is_featured'      => (bool) $item->is_featured,
+                'spice_level'      => $item->spice_level,
+                'preparation_time' => $item->preparation_time,
+                'image_urls'       => $item->image_urls,
+                'category'         => $item->category ? ['id' => $item->category->id, 'name' => $item->category->category_name] : null,
+                'subcategory'      => $item->subcategory ? ['id' => $item->subcategory->id, 'name' => $item->subcategory->name] : null,
+                'owner'            => $item->owner,
+                'default_variant'  => $default,
+                'variants'         => $item->variants,
+            ],
         ]);
     }
-    // ======================================================
-    // STORE ITEM (FORM-DATA + IMAGES + VARIANTS + GST)
-    // ======================================================
-    public function store(Request $request)
-    {
-        // variants comes as JSON string in form-data
-        $variants = json_decode($request->variants, true);
 
-        if (!is_array($variants)) {
-            return response()->json(['message' => 'Invalid variants format'], 422);
+    // ── Store (Add Item) ───────────────────────────────────
+    public function store(Request $request): JsonResponse
+    {
+        $variants = json_decode($request->input('variants', '[]'), true);
+        if (!is_array($variants) || empty($variants)) {
+            return response()->json(['status' => false, 'message' => 'At least one variant is required.'], 422);
         }
 
-        $validator = Validator::make(
-            array_merge($request->all(), ['variants' => $variants]),
-            [
-                'shop_id'     => 'required|exists:app_owner_shops,shop_id',
-                'category_id' => 'required|exists:item_categories,id',
-                'subcategory_id' => 'nullable|exists:item_subcategories,id',
-                'item_name'   => 'required|string|max:100',
-                'description' => 'nullable|string',
-                'status'      => 'nullable|in:active,inactive',
-
-                // VARIANTS
-                'variants'               => 'required|array|min:1',
-                'variants.*.label'       => 'required|string|max:50',
-                'variants.*.price'       => 'required|numeric|min:0',
-                'variants.*.gst_percent' => 'required|numeric|min:0',
-                'variants.*.hsn_code'    => 'nullable|string|max:20',
-                'variants.*.is_default'  => 'nullable|boolean',
-
-                // IMAGES
-                'images.*' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
-            ]
-        );
-
+        $validator = Validator::make(array_merge($request->all(), ['variants' => $variants]), [
+            'shop_id'                  => 'required|exists:app_owner_shops,shop_id',
+            'category_id'              => 'required|exists:item_categories,id',
+            'subcategory_id'           => 'nullable|exists:item_subcategories,id',
+            'item_name'                => 'required|string|max:150',
+            'description'              => 'nullable|string|max:1000',
+            'is_veg'                   => 'nullable|boolean',
+            'is_jain'                  => 'nullable|boolean',
+            'spice_level'              => 'nullable|in:none,mild,medium,hot,very_hot',
+            'preparation_time'         => 'nullable|integer|min:1|max:300',
+            'is_featured'              => 'nullable|boolean',
+            'status'                   => 'nullable|in:active,inactive',
+            'variants'                 => 'required|array|min:1',
+            'variants.*.label'         => 'required|string|max:100',
+            'variants.*.price'         => 'required|numeric|min:0',
+            'variants.*.offer_price'   => 'nullable|numeric|min:0',
+            'variants.*.gst_percent'   => 'required|numeric|min:0|max:100',
+            'variants.*.hsn_code'      => 'nullable|string|max:20',
+            'variants.*.is_default'    => 'nullable|boolean',
+            'images.*'                 => 'nullable|image|mimes:jpeg,png,jpg,webp|max:3072',
+        ]);
         if ($validator->fails()) {
-            return response()->json(['errors'=>$validator->errors()],422);
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
         DB::beginTransaction();
-
         try {
+            $imagePaths = $this->storeImages($request);
 
-            // ------------------ IMAGE UPLOAD ------------------
-            $imagePaths = [];
-            if ($request->hasFile('images')) {
-                foreach ($request->file('images') as $image) {
-                    $imagePaths[] = $image->store('items', 'public');
-                }
-            }
-
-            // ------------------ CREATE ITEM ------------------
             $item = Item::create([
-                'shop_id'        => $request->shop_id,
-                'category_id'    => $request->category_id,
-                'subcategory_id' => $request->subcategory_id,
-                'item_name'      => $request->item_name,
-                'description'    => $request->description,
-                'status'         => $request->status ?? 'active',
-                'images'         => $imagePaths
+                'shop_id'          => $request->shop_id,
+                'category_id'      => $request->category_id,
+                'subcategory_id'   => $request->subcategory_id,
+                'item_name'        => $request->item_name,
+                'description'      => $request->description,
+                'is_veg'           => $request->boolean('is_veg', true),
+                'is_jain'          => $request->boolean('is_jain'),
+                'spice_level'      => $request->spice_level,
+                'preparation_time' => $request->preparation_time,
+                'is_featured'      => $request->boolean('is_featured'),
+                'status'           => $request->get('status', 'active'),
+                'images'           => $imagePaths,
             ]);
 
-            // ------------------ CREATE VARIANTS ------------------
-            foreach ($variants as $variant) {
-                ItemVariant::create([
-                    'item_id'     => $item->id,
-                    'label'       => $variant['label'],
-                    'price'       => $variant['price'],
-                    'offer_price' => $variant['offer_price'] ?? null,
-                    'gst_percent' => $variant['gst_percent'],
-                    'hsn_code'    => $variant['hsn_code'] ?? null,
-                    'is_default'  => $variant['is_default'] ?? false,
-                    'status'      => 'active',
-                ]);
-            }
+            $this->syncVariants($item->id, $variants);
 
             DB::commit();
-
             return response()->json([
-                'message' => 'Item created successfully',
-                'data'    => $item->load('variants')
+                'status'  => true,
+                'message' => 'Item created successfully.',
+                'data'    => $item->load('variants'),
             ], 201);
-
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['error'=>$e->getMessage()],500);
+            Log::error('[ItemController] store failed: ' . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'Failed to create item.'], 500);
         }
     }
 
-    // ======================================================
-    // UPDATE ITEM + IMAGES + VARIANTS
-    // ======================================================
-    public function update(Request $request, $id)
+    // ── Update Item ────────────────────────────────────────
+    public function update(Request $request, int $id): JsonResponse
     {
-        $item = Item::with('variants')->find($id);
+        $item     = Item::with('variants')->findOrFail($id);
+        $variants = $request->filled('variants') ? json_decode($request->variants, true) : null;
 
-        if (!$item) {
-            return response()->json(['message' => 'Item not found'], 404);
+        $rules = [
+            'category_id'       => 'sometimes|exists:item_categories,id',
+            'subcategory_id'    => 'nullable|exists:item_subcategories,id',
+            'item_name'         => 'sometimes|string|max:150',
+            'description'       => 'nullable|string|max:1000',
+            'is_veg'            => 'nullable|boolean',
+            'is_jain'           => 'nullable|boolean',
+            'spice_level'       => 'nullable|in:none,mild,medium,hot,very_hot',
+            'preparation_time'  => 'nullable|integer|min:1',
+            'is_featured'       => 'nullable|boolean',
+            'status'            => 'nullable|in:active,inactive',
+            'images.*'          => 'nullable|image|mimes:jpeg,png,jpg,webp|max:3072',
+        ];
+        if ($variants !== null) {
+            $rules['variants']                = 'array|min:1';
+            $rules['variants.*.label']        = 'required|string|max:100';
+            $rules['variants.*.price']        = 'required|numeric|min:0';
+            $rules['variants.*.offer_price']  = 'nullable|numeric|min:0';
+            $rules['variants.*.gst_percent']  = 'required|numeric|min:0|max:100';
         }
 
-        $variants = $request->variants
-            ? json_decode($request->variants, true)
-            : [];
+        $mergedInput = $variants !== null
+            ? array_merge($request->all(), ['variants' => $variants])
+            : $request->all();
 
-        // ------------------ VALIDATION ------------------
-        $validator = Validator::make(
-            array_merge($request->all(), ['variants' => $variants]),
-            [
-                'category_id' => 'required|exists:item_categories,id',
-                'subcategory_id' => 'nullable|exists:item_subcategories,id',
-                'item_name' => 'required|string|max:100',
-                'description' => 'nullable|string',
-
-                'variants' => 'required|array|min:1',
-                'variants.*.label' => 'required|string|max:50',
-                'variants.*.price' => 'required|numeric|min:0',
-                'variants.*.gst_percent' => 'required|numeric|min:0',
-            ]
-        );
-
+        $validator = Validator::make($mergedInput, $rules);
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
         DB::beginTransaction();
-
         try {
-
-            // =====================================================
-            // IMAGE SYNC (PARTIAL REMOVE + ADD SUPPORT)
-            // =====================================================
-
-            $existingImages = $request->existing_images
+            // Handle images
+            $existingImages = $request->filled('existing_images')
                 ? json_decode($request->existing_images, true)
                 : [];
-
             $currentImages = $item->images ?? [];
+            $finalImages   = [];
 
-            $finalImages = [];
-
-            // Keep only selected existing images
             foreach ($currentImages as $old) {
-
                 $fullUrl = asset('storage/' . $old);
-
-                if (in_array($fullUrl, $existingImages)) {
+                if (in_array($fullUrl, (array) $existingImages) || in_array($old, (array) $existingImages)) {
                     $finalImages[] = $old;
                 } else {
                     Storage::disk('public')->delete($old);
                 }
             }
-
-            // Add new uploaded images
-            if ($request->hasFile('images')) {
-                foreach ($request->file('images') as $image) {
-                    $finalImages[] = $image->store('items', 'public');
-                }
+            foreach ($this->storeImages($request) as $new) {
+                $finalImages[] = $new;
             }
 
-            $item->images = $finalImages;
+            $updateData = array_filter([
+                'category_id'      => $request->category_id,
+                'subcategory_id'   => $request->subcategory_id,
+                'item_name'        => $request->item_name,
+                'description'      => $request->description,
+                'spice_level'      => $request->spice_level,
+                'preparation_time' => $request->preparation_time,
+                'status'           => $request->status,
+                'images'           => count($finalImages) ? $finalImages : null,
+            ], fn($v) => $v !== null);
 
-            // =====================================================
-            // UPDATE ITEM
-            // =====================================================
+            if ($request->has('is_veg'))      $updateData['is_veg']      = $request->boolean('is_veg');
+            if ($request->has('is_jain'))     $updateData['is_jain']     = $request->boolean('is_jain');
+            if ($request->has('is_featured')) $updateData['is_featured'] = $request->boolean('is_featured');
 
-            $item->update([
-                'category_id' => $request->category_id,
-                'subcategory_id' => $request->subcategory_id,
-                'item_name' => $request->item_name,
-                'description' => $request->description,
-                'status' => $request->status ?? $item->status,
-            ]);
+            $item->update($updateData);
 
-            // =====================================================
-            // VARIANT SYNC
-            // =====================================================
-
-            $existingIds = $item->variants->pluck('id')->toArray();
-            $incomingIds = collect($variants)->pluck('id')->filter()->toArray();
-
-            // Soft delete removed variants
-            ItemVariant::whereIn('id', array_diff($existingIds, $incomingIds))
-                ->update([
-                    'status' => 'inactive',
-                    'is_default' => false
-                ]);
-
-            $hasDefault = false;
-
-            foreach ($variants as $variant) {
-
-                // Ensure only one default
-                if (!empty($variant['is_default'])) {
-                    $hasDefault = true;
-                }
-
-                if (!empty($variant['id'])) {
-
-                    ItemVariant::where('id', $variant['id'])->update([
-                        'label' => $variant['label'],
-                        'price' => $variant['price'],
-                        'offer_price' => $variant['offer_price'] ?? null,
-                        'gst_percent' => $variant['gst_percent'],
-                        'hsn_code' => $variant['hsn_code'] ?? null,
-                        'is_default' => $variant['is_default'] ?? false,
-                        'status' => 'active',
-                    ]);
-
-                } else {
-
-                    ItemVariant::create([
-                        'item_id' => $item->id,
-                        'label' => $variant['label'],
-                        'price' => $variant['price'],
-                        'offer_price' => $variant['offer_price'] ?? null,
-                        'gst_percent' => $variant['gst_percent'],
-                        'hsn_code' => $variant['hsn_code'] ?? null,
-                        'is_default' => $variant['is_default'] ?? false,
-                        'status' => 'active',
-                    ]);
-                }
-            }
-
-            // If no default selected, auto assign first active
-            if (!$hasDefault) {
-                ItemVariant::where('item_id', $item->id)
-                    ->where('status', 'active')
-                    ->first()
-                    ?->update(['is_default' => true]);
+            if ($variants !== null) {
+                $this->syncVariants($item->id, $variants, $item->variants->pluck('id')->toArray());
             }
 
             DB::commit();
-
-            return response()->json([
-                'message' => 'Item updated successfully',
-                'data' => $item->fresh()->load('variants')
-            ]);
-
+            return response()->json(['status' => true, 'message' => 'Item updated.', 'data' => $item->fresh()->load('variants')]);
         } catch (\Exception $e) {
-
             DB::rollBack();
-
-            return response()->json([
-                'error' => $e->getMessage()
-            ], 500);
+            Log::error('[ItemController] update failed: ' . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'Failed to update item.'], 500);
         }
     }
 
-    // ======================================================
-    // DELETE ITEM
-    // ======================================================
-    public function destroy($id)
+    // ── Delete ─────────────────────────────────────────────
+    public function destroy(int $id): JsonResponse
     {
-        Item::findOrFail($id)->delete();
-        return response()->json(['message'=>'Item deleted']);
+        $item = Item::findOrFail($id);
+        foreach ($item->images ?? [] as $img) Storage::disk('public')->delete($img);
+        $item->delete();
+        return response()->json(['status' => true, 'message' => 'Item deleted.']);
     }
 
-    // ======================================================
-    // DELETE VARIANT (SOFT DELETE)
-    // ======================================================
-    public function deleteVariant($id)
+    // ── Toggle Status ──────────────────────────────────────
+    public function toggleStatus(int $id): JsonResponse
     {
-        ItemVariant::where('id',$id)
-            ->update(['status'=>'inactive','is_default'=>false]);
-
-        return response()->json(['message'=>'Variant deleted']);
+        $item         = Item::findOrFail($id);
+        $item->status = $item->status === 'active' ? 'inactive' : 'active';
+        $item->save();
+        return response()->json(['status' => true, 'item_status' => $item->status]);
     }
-    public function itemsBySubcategory(Request $request)
+
+    // ── Items by Subcategory ───────────────────────────────
+    public function itemsBySubcategory(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'subcategory_id' => 'required|exists:item_subcategories,id',
             'shop_id'        => 'nullable|exists:app_owner_shops,shop_id',
         ]);
-
         if ($validator->fails()) {
-            return response()->json([
-                'errors' => $validator->errors()
-            ], 422);
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
-
-        $subcategoryId = $request->subcategory_id;
-        $shopId        = $request->shop_id;
 
         $items = Item::with([
-            // ✅ LOAD COMMISSION FIELDS
             'category:id,category_name,commission_percent,commission_type',
             'subcategory:id,name,commission_percent,commission_type',
-            'owner',
-
-            // ✅ VARIANTS
-            'variants' => function ($q) {
-                $q->where('status', 'active');
-            },
-
-            // ✅ DEFAULT VARIANT
-            'defaultVariant:id,item_id,label,price,offer_price,gst_percent,hsn_code,is_default'
+            'owner:shop_id,restaurant_name',
+            'variants' => fn($q) => $q->where('status', 'active'),
         ])
-        ->where('subcategory_id', $subcategoryId)
+        ->where('subcategory_id', $request->subcategory_id)
         ->where('status', 'active')
-        ->when($shopId, function ($q) use ($shopId) {
-            $q->orderByRaw('shop_id = ? DESC', [$shopId]);
-        })
-        ->orderBy('id', 'DESC')
-        ->get();
+        ->when($request->shop_id, fn($q) => $q->orderByRaw('shop_id = ? DESC', [$request->shop_id]))
+        ->orderByDesc('id')
+        ->get()
+        ->map(fn($i) => $this->applyCommission($this->appendImageUrls($i)));
 
-        // ✅ APPLY COMMISSION
-        $items->transform(function ($item) {
-            return $this->applyCommissionToVariants($item);
-        });
-
-        return response()->json([
-            'data' => $items
-        ], 200);
+        return response()->json(['status' => true, 'data' => $items]);
     }
-    public function similarItems(Request $request)
+
+    // ── Similar Items ──────────────────────────────────────
+    public function similarItems(Request $request): JsonResponse
     {
-        $request->validate([
-            'item_id' => 'required|exists:items,id'
-        ]);
+        $validator = Validator::make($request->all(), ['item_id' => 'required|exists:items,id']);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
 
-        $item = Item::find($request->item_id);
-
-        $items = Item::with(['variants','owner'])
+        $item  = Item::findOrFail($request->item_id);
+        $items = Item::with(['variants', 'owner:shop_id,restaurant_name'])
             ->where('subcategory_id', $item->subcategory_id)
             ->where('id', '!=', $item->id)
-            ->where('status','active')
-            ->limit(6)
-            ->get();
+            ->where('status', 'active')
+            ->limit(8)
+            ->get()
+            ->map(fn($i) => $this->appendImageUrls($i));
 
-             $items->transform(function ($item) {
-                return $this->applyCommissionToVariants($item);
-            });
-
-        return response()->json([
-            'data' => $items
-        ]);
+        return response()->json(['status' => true, 'data' => $items]);
     }
 
-  
-    public function show($id)
-{
-    $item = Item::with([
-        'category:id,category_name',
-        'subcategory:id,name',
-        'variants' => function ($q) {
-            $q->where('status', 'active')
-              ->orderByDesc('is_default');
-        }
-    ])
-    ->where('id', $id)
-    ->first();
-
-    if (!$item) {
-        return response()->json([
-            'status' => false,
-            'message' => 'Item not found'
-        ], 404);
-    }
-
-    // ✅ APPLY COMMISSION
-    $item = $this->applyCommissionToVariants($item);
-
-    return response()->json([
-        'status' => true,
-        'data' => [
-            'id' => $item->id,
-            'shop_id' => $item->shop_id,
-            'item_name' => $item->item_name,
-            'description' => $item->description,
-            'status' => $item->status,
-            'images' => $item->image_urls,
-
-            'category' => [
-                'id' => $item->category?->id,
-                'name' => $item->category?->category_name,
-            ],
-
-            'subcategory' => [
-                'id' => $item->subcategory?->id,
-                'name' => $item->subcategory?->name,
-            ],
-
-            // ✅ DIRECT VARIANTS (already modified)
-            'variants' => $item->variants,
-
-            'default_variant' => $item->variants->firstWhere('is_default', true)
-            
-        ]
-    ]);
-}
-
-    public function getAppHomeFilter()
+    // ── App Home Filters ───────────────────────────────────
+    public function getAppHomeFilter(): JsonResponse
     {
-        $filters = AppHomeFilter::get();
-        return response()->json(['data' => $filters], 200);
+        return response()->json(['status' => true, 'data' => AppHomeFilter::all()]);
     }
 
-private function applyCommissionToVariants($item)
-{
-    $item->variants->transform(function ($variant) use ($item) {
+    // ── Private Helpers ────────────────────────────────────
+    private function storeImages(Request $request): array
+    {
+        $paths = [];
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $img) {
+                $paths[] = $img->store('items', 'public');
+            }
+        }
+        return $paths;
+    }
 
-        $price = $variant->offer_price ?? $variant->price;
+    private function appendImageUrls(Item $item): Item
+    {
+        $images = is_array($item->images)
+            ? $item->images
+            : json_decode($item->images ?? '[]', true);
 
-        $commission = CommissionService::getCommissionDetails($item, $price);
+        $item->image_urls = collect($images ?? [])
+            ->map(fn($p) => asset('storage/' . $p))
+            ->toArray();
 
-        $commissionAmount = CommissionService::calculateCommission($price, $commission);
+        return $item;
+    }
 
-        $variant->base_price = $price; // ✅ NEW
-        $variant->commission_type = $commission['type'];
-        $variant->commission_value = $commission['value'];
-        $variant->commission_amount = round($commissionAmount, 2);
-        $variant->final_price = round($price + $commissionAmount, 2);
+    private function syncVariants(int $itemId, array $variants, array $existingIds = []): void
+    {
+        $incomingIds = collect($variants)->pluck('id')->filter()->toArray();
 
-        return $variant;
-    });
+        // Deactivate removed variants
+        if (!empty($existingIds)) {
+            ItemVariant::whereIn('id', array_diff($existingIds, $incomingIds))
+                ->update(['status' => 'inactive', 'is_default' => false]);
+        }
 
-    return $item;
-}
+        $hasDefault = false;
+        foreach ($variants as $v) {
+            if (!empty($v['is_default'])) $hasDefault = true;
+            $data = [
+                'label'       => $v['label'],
+                'price'       => (float) $v['price'],
+                'offer_price' => isset($v['offer_price']) && $v['offer_price'] > 0 ? (float) $v['offer_price'] : null,
+                'gst_percent' => (float) ($v['gst_percent'] ?? 0),
+                'hsn_code'    => $v['hsn_code'] ?? null,
+                'is_default'  => (bool) ($v['is_default'] ?? false),
+                'status'      => 'active',
+            ];
+            if (!empty($v['id'])) {
+                ItemVariant::where('id', $v['id'])->update($data);
+            } else {
+                ItemVariant::create(array_merge($data, ['item_id' => $itemId]));
+            }
+        }
+
+        if (!$hasDefault) {
+            ItemVariant::where('item_id', $itemId)->where('status', 'active')->first()?->update(['is_default' => true]);
+        }
+    }
+
+    private function applyCommission(Item $item): Item
+    {
+        $item->variants->transform(function ($v) use ($item) {
+            $price            = (float) ($v->offer_price ?? $v->price ?? 0);
+            $commission       = CommissionService::getCommissionDetails($item, $price);
+            $commissionAmount = CommissionService::calculateCommission($price, $commission);
+            $v->commission_type   = $commission['type'];
+            $v->commission_value  = $commission['value'];
+            $v->commission_amount = round($commissionAmount, 2);
+            $v->final_price       = round($price + $commissionAmount, 2);
+            return $v;
+        });
+        return $item;
+    }
 }

@@ -9,119 +9,79 @@ use Illuminate\Support\Facades\Validator;
 
 class UserAddressController extends Controller
 {
-    // Add new address
+    // GET /addresses/{user_id}
+    // Flutter expects { data: [...] }
+    public function listAddresses($user_id)
+    {
+        $addresses = UserAddress::where('user_id', $user_id)
+            ->orderByDesc('is_default')
+            ->get();
+
+        return response()->json(['status' => true, 'data' => $addresses]);
+    }
+
+    // POST /addresses
     public function addAddress(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'user_id'      => 'required|exists:app_users,id',
-            'label'        => 'nullable|string',
+            'label'        => 'nullable|string|max:50',
             'address_line' => 'required|string',
-            'city'         => 'required|string',
-            'state'        => 'required|string',
+            'city'         => 'required|string|max:100',
+            'state'        => 'required|string|max:100',
             'pincode'      => 'required|string|max:10',
             'lat'          => 'nullable|numeric',
-            'lng'          => 'nullable|numeric'
+            'lng'          => 'nullable|numeric',
+            'is_default'   => 'nullable|boolean',
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'errors' => $validator->errors()
-            ], 422);
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
-        // If user has no default address, set this as default
-        $isDefault = UserAddress::where('user_id', $request->user_id)->count() == 0;
+        $isDefault = $request->is_default
+            ?? UserAddress::where('user_id', $request->user_id)->count() === 0;
+
+        if ($isDefault) {
+            UserAddress::where('user_id', $request->user_id)->update(['is_default' => false]);
+        }
 
         $address = UserAddress::create([
             'user_id'      => $request->user_id,
-            'label'        => $request->label,
+            'label'        => $request->label ?? 'Home',
             'address_line' => $request->address_line,
             'city'         => $request->city,
             'state'        => $request->state,
             'pincode'      => $request->pincode,
-            'lat'          => $request->lat,
-            'lng'          => $request->lng,
-            'is_default'   => $isDefault
+            'lat'          => $request->lat ?? 0,
+            'lng'          => $request->lng ?? 0,
+            'is_default'   => $isDefault,
         ]);
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Address added successfully',
-            'data' => $address
-        ]);
+        return response()->json(['status' => true, 'message' => 'Address added', 'data' => $address]);
     }
 
-    // Update address
+    // PUT /addresses/{id}
     public function updateAddress(Request $request, $id)
     {
         $address = UserAddress::findOrFail($id);
-
-        $validator = Validator::make($request->all(), [
-            'label'        => 'nullable|string',
-            'address_line' => 'nullable|string',
-            'city'         => 'nullable|string',
-            'state'        => 'nullable|string',
-            'pincode'      => 'nullable|string|max:10',
-            'lat'          => 'nullable|numeric',
-            'lng'          => 'nullable|numeric'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        $address->update($request->all());
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Address updated successfully',
-            'data' => $address
-        ]);
+        $address->update($request->only(['label', 'address_line', 'city', 'state', 'pincode', 'lat', 'lng']));
+        return response()->json(['status' => true, 'message' => 'Address updated', 'data' => $address]);
     }
 
-    // Delete address
+    // DELETE /addresses/{id}
     public function deleteAddress($id)
     {
-        $address = UserAddress::findOrFail($id);
-        $address->delete();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Address deleted successfully'
-        ]);
+        UserAddress::findOrFail($id)->delete();
+        return response()->json(['status' => true, 'message' => 'Address deleted']);
     }
 
-    // List all addresses of user
-    public function listAddresses($user_id)
-    {
-        $addresses = UserAddress::where('user_id', $user_id)->orderByDesc('is_default')->get();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Addresses fetched successfully',
-            'data' => $addresses
-        ]);
-    }
-
-    // Set default address
+    // POST /addresses/{id}/set-default
     public function setDefaultAddress($id)
     {
         $address = UserAddress::findOrFail($id);
-
-        // Remove default from all other addresses
         UserAddress::where('user_id', $address->user_id)->update(['is_default' => false]);
-
-        // Set new default
         $address->update(['is_default' => true]);
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Default address updated successfully',
-            'data' => $address
-        ]);
+        return response()->json(['status' => true, 'message' => 'Default address set', 'data' => $address]);
     }
 }

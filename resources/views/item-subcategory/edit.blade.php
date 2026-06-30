@@ -158,7 +158,8 @@ document.getElementById('categorySelect')
         let categoryId = this.value;
         if (!categoryId) return;
 
-        fetch('/admin/get-category-tax-hsn/' + categoryId)
+        fetch('/admin/categories/' + categoryId + '/tax-hsn')
+
             .then(response => response.json())
             .then(data => {
 

@@ -2,33 +2,21 @@
 
 namespace App\Http\Controllers\Api;
 
-use Illuminate\Http\Request;
-use App\Models\ItemCategory;
 use App\Http\Controllers\Controller;
-
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Http\JsonResponse;
+use App\Models\ItemCategory;
 
 class ItemCategoryController extends Controller
 {
-    public function index()
+    public function index(): JsonResponse
     {
-        $categories = ItemCategory::where('status', 'active')->get();
-        return response()->json(['data' => $categories], 200);
-    }
+        $categories = ItemCategory::where('status', 'active')
+            ->select('id', 'category_name', 'image', 'commission_percent', 'commission_type')
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get()
+            ->map(fn($c) => array_merge($c->toArray(), ['image_url' => $c->image ? asset('storage/' . $c->image) : null]));
 
-    public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'category_name' => 'required|string|unique:item_categories,category_name',
-            'description' => 'nullable|string',
-            'status' => 'nullable|in:active,inactive'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $category = ItemCategory::create($validator->validated());
-        return response()->json(['message' => 'Category added successfully', 'data' => $category], 201);
+        return response()->json(['status' => true, 'data' => $categories]);
     }
 }

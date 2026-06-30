@@ -4,142 +4,187 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\AppUser;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use App\Models\AppUser;
+use App\Models\Wallet;
+use App\Mail\SendOtpMail;
+use App\Services\NotificationService;
 use Carbon\Carbon;
 
 class AuthController extends Controller
 {
-    // STEP 1: Send OTP
-   public function sendOtp(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'phone_number' => 'required|digits:10',
-        'full_name'   => 'required|string|max:255'
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json([
-            'status' => false,
-            'errors' => $validator->errors()
-        ], 422);
-    }
-
-    $phone_number = $request->phone_number;
-    $name = $request->full_name;   // <-- FIXED
-
-    // Check if user exists
-    $user = AppUser::where('phone_number', $phone_number)->first();
-
-    // If new user, create minimal user record
-    if (!$user) {
-        $user = AppUser::create([
-            'full_name' => $name,
-            'phone_number' => $phone_number
-        ]);
-    }
-
-    // Dummy OTP
-    $otp = "1234";
-
-    $user->update([
-        'otp_code'       => $otp,
-        'otp_expires_at' => Carbon::now()->addMinutes(5)
-    ]);
-
-    return response()->json([
-        'status' => true,
-        'message' => 'OTP sent successfully (dummy)',
-        'phone_number' => $phone_number,
-        'otp' => $otp 
-    ]);
-}
-
-    // STEP 2: Verify OTP
-   public function verifyOtp(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'phone_number' => 'required|digits:10',
-        'otp'    => 'required|digits:4'
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json([
-            'status' => false,
-            'errors' => $validator->errors()
-        ], 422);
-    }
-
-    $user = AppUser::where('phone_number', $request->phone_number)->first();
-
-    if (!$user) {
-        return response()->json([
-            'status' => false,
-            'message' => 'User not found'
-        ], 404);
-    }
-
-    if ($user->otp_code != $request->otp) {   // <-- MATCHING FIELD
-        return response()->json([
-            'status' => false,
-            'message' => 'Invalid OTP'
-        ], 401);
-    }
-
-    if (Carbon::now()->greaterThan($user->otp_expires_at)) {
-        return response()->json([
-            'status' => false,
-            'message' => 'OTP expired'
-        ], 401);
-    }
-
-    // Verify and clear OTP
-    $user->update([
-        'otp_code' => null,
-        'otp_expires_at' => null,
-        'is_verified' => 1
-    ]);
-
-    return response()->json([
-        'status' => true,
-        'message' => 'OTP verified successfully. Logged in!',
-        'user' => $user
-    ]);
-}
-
-    // STEP 3: Update Profile (after OTP login)
-    public function updateProfile(Request $request)
+    // ── Send OTP ───────────────────────────────────────────
+    public function sendOtp(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'user_id'  => 'required|exists:app_users,id',
-            'dob'      => 'nullable|date',
-            'gender'   => 'nullable|in:male,female,other',
-            'picture'  => 'nullable|string',
-            'state'    => 'nullable|string',
-            'city'     => 'nullable|string',
-            'pincode'  => 'nullable|string|max:10',
-            'address'  => 'nullable|string',
-            'lat'      => 'nullable|numeric',
-            'lng'      => 'nullable|numeric',
+            'email' => 'required|email|max:255',
         ]);
-
         if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'errors' => $validator->errors()
-            ], 422);
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
-        $user = AppUser::find($request->user_id);
+        $email = strtolower(trim($request->email));
 
-        $user->update($request->all());
+        if (AppUser::where('email', $email)->where('is_blocked', 1)->exists()) {
+            return response()->json(['status' => false, 'message' => 'Your account has been suspended.'], 403);
+        }
+
+        $otp  = random_int(1000, 9999);
+        $user = AppUser::firstOrCreate(
+            ['email' => $email],
+            ['full_name' => Str::before($email, '@')]
+        );
+
+        $user->update([
+            'otp'            => $otp,
+            'otp_expires_at' => Carbon::now()->addMinutes(10),
+        ]);
+
+        try {
+            Mail::to($email)->send(new SendOtpMail($otp, $email));
+        } catch (\Exception $e) {
+            Log::error('[Auth] OTP mail failed for ' . $email . ': ' . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'Failed to send OTP. Please try again.'], 500);
+        }
+
+        return response()->json(['status' => true, 'message' => 'OTP sent to your email']);
+    }
+
+    // ── Verify OTP ─────────────────────────────────────────
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'email'         => 'required|email',
+            'otp'           => 'required|digits:4',
+            'fcm_token'     => 'nullable|string|max:500',
+            'referral_code' => 'nullable|string|max:20',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
+
+        $email = strtolower(trim($request->email));
+        $user  = AppUser::where('email', $email)->where('otp', $request->otp)->first();
+
+        if (!$user) {
+            return response()->json(['status' => false, 'message' => 'Invalid OTP. Please try again.'], 400);
+        }
+        if (!$user->otp_expires_at || Carbon::now()->gt($user->otp_expires_at)) {
+            return response()->json(['status' => false, 'message' => 'OTP has expired. Please request a new one.'], 400);
+        }
+
+        $isNewUser = !$user->is_verified;
+        $token     = bin2hex(random_bytes(30));
+
+        $user->update([
+            'api_token'      => $token,
+            'otp'            => null,
+            'otp_expires_at' => null,
+            'is_verified'    => 1,
+            'fcm_token'      => $request->fcm_token ?? $user->fcm_token,
+            'last_active_at' => now(),
+        ]);
+
+        if ($isNewUser) {
+            // Assign referral code
+            $user->update(['referral_code' => strtoupper(Str::random(8))]);
+
+            // Create wallet
+            $user->getOrCreateWallet();
+
+            // Handle referral bonus
+            if ($request->filled('referral_code')) {
+                $referrer = AppUser::where('referral_code', $request->referral_code)->first();
+                if ($referrer && $referrer->id !== $user->id) {
+                    $user->update(['referred_by' => $request->referral_code]);
+                    $referrer->getOrCreateWallet()->credit(50, 'Referral bonus — invited ' . $user->email, 'referral', $user->id);
+                    $user->getOrCreateWallet()->credit(30, 'Welcome bonus via referral', 'referral', $referrer->id);
+                }
+            }
+
+            NotificationService::send($user->id, 'Welcome to Sweetan! 🎉', 'Your account is all set. Start exploring sweet treats!', 'welcome');
+        }
+
+        return response()->json([
+            'status'      => true,
+            'token'       => $token,
+            'is_new_user' => $isNewUser,
+            'user'        => $user->fresh()->makeHidden(['otp', 'otp_expires_at']),
+        ]);
+    }
+
+    // ── Logout ─────────────────────────────────────────────
+    public function logout(Request $request): JsonResponse
+    {
+        $token = $request->bearerToken() ?? $request->input('api_token');
+        if ($token) {
+            AppUser::where('api_token', $token)->update(['api_token' => null, 'fcm_token' => null]);
+        }
+        return response()->json(['status' => true, 'message' => 'Logged out successfully']);
+    }
+
+    // ── Update Profile ─────────────────────────────────────
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id'      => 'required|exists:app_users,id',
+            'full_name'    => 'nullable|string|max:100',
+            'phone_number' => 'nullable|string|max:20',
+            'dob'          => 'nullable|date',
+            'gender'       => 'nullable|in:male,female,other',
+            'picture'      => 'nullable|string|max:500',
+            'fcm_token'    => 'nullable|string|max:500',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
+
+        $user = AppUser::findOrFail($request->user_id);
+        $user->update($validator->safe()->except('user_id'));
+
+        return response()->json(['status' => true, 'message' => 'Profile updated', 'user' => $user->fresh()]);
+    }
+
+    // ── Get Profile ────────────────────────────────────────
+    public function getProfile(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:app_users,id',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
+
+        $user   = AppUser::findOrFail($request->user_id);
+        $wallet = $user->getOrCreateWallet();
 
         return response()->json([
             'status' => true,
-            'message' => 'Profile updated successfully',
-            'user' => $user
+            'data'   => array_merge($user->toArray(), ['wallet_balance' => $wallet->balance]),
         ]);
     }
 
- 
+    // ── Delete Account ─────────────────────────────────────
+    public function deleteAccount(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:app_users,id',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
+
+        $user = AppUser::findOrFail($request->user_id);
+        $user->update([
+            'is_blocked' => 1,
+            'api_token'  => null,
+            'email'      => 'deleted_' . $user->id . '_' . $user->email,
+        ]);
+
+        return response()->json(['status' => true, 'message' => 'Account deleted successfully']);
+    }
 }

@@ -3,125 +3,144 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class Item extends Model
 {
-    protected $appends = ['image_urls', 'default_variant'];
+    use SoftDeletes;
 
-   protected $fillable = [
-    // Relations
-    'shop_id',
-    'category_id',
-    'subcategory_id',
-
-    // Core
-    'item_name',
-    'slug',
-    'description',
-    'item_type',
-    'status',
-
-    // Pricing & Tax
-    'price',
-    'offer_price',
-    'gst_percent',
-    'cgst',
-    'sgst',
-    'igst',
-    'hsn_code',
-    'cess_percent',
-    'is_tax_inclusive',
-
-    // Inventory
-    'sku',
-    'stock_quantity',
-    'track_inventory',
-    'low_stock_alert',
-    'min_quantity',
-    'max_quantity',
-
-    // Food specific
-    'is_veg',
-    'is_jain',
-    'spice_level',
-    'preparation_time',
-
-    // Media
-    'images',
-    'thumbnail_image',
-    'video_url',
-
-    // Display
-    'is_featured',
-    'display_order',
-    'badge',
-
-    // Analytics
-    'rating_avg',
-    'rating_count',
-    'total_sold',
-
-    // Misc
-    'weight_or_piece',
-    'allow_custom_notes',
-    'commission_percent',
-    'commission_type'
-];
-
-    protected $casts = [
-        'images' => 'array',
+    protected $fillable = [
+        'shop_id', 'category_id', 'subcategory_id',
+        'item_name', 'slug', 'description', 'item_type',
+        'price', 'offer_price',
+        'min_quantity', 'max_quantity', 'weight_or_piece', 'allow_custom_notes',
+        'is_veg', 'is_jain', 'spice_level', 'preparation_time',
+        'is_featured', 'display_order', 'badge', 'status',
+        'images', 'thumbnail_image', 'video_url',
+        'gst_percent', 'cgst', 'sgst', 'igst', 'hsn_code', 'cess_percent', 'is_tax_inclusive',
+        'sku', 'stock_quantity', 'track_inventory', 'low_stock_alert',
+        'commission_percent', 'commission_type',
+        'rating_avg', 'rating_count', 'total_sold',
     ];
 
+    protected $casts = [
+        'images'           => 'array',
+        'is_veg'           => 'boolean',
+        'is_jain'          => 'boolean',
+        'is_featured'      => 'boolean',
+        'allow_custom_notes' => 'boolean',
+        'is_tax_inclusive' => 'boolean',
+        'track_inventory'  => 'boolean',
+        'price'            => 'float',
+        'offer_price'      => 'float',
+        'gst_percent'      => 'float',
+        'commission_percent' => 'float',
+        'rating_avg'       => 'float',
+        'low_stock_alert'  => 'integer',
+    ];
 
-    protected $hidden = ['images'];
-    
-    /**
-     * Return full image URLs
-     */
-    public function getImageUrlsAttribute()
+    protected static function booted(): void
     {
-        if (empty($this->images)) {
-            return [];
-        }
+        static::creating(function (self $item) {
+            if (empty($item->slug)) {
+                $item->slug = Str::slug($item->item_name) . '-' . Str::random(5);
+            }
+        });
+    }
 
-        return collect($this->images)->map(function ($path) {
-            return asset('storage/' . $path);
-            // OR: Storage::disk('public')->url($path);
-        })->toArray();
+    // ── Relationships ──────────────────────────────────────────────────────────
+    public function variants()
+    {
+        return $this->hasMany(ItemVariant::class)->where('status', 'active');
+    }
+
+    public function allVariants()
+    {
+        return $this->hasMany(ItemVariant::class);
+    }
+
+    public function defaultVariant()
+    {
+        return $this->hasOne(ItemVariant::class)->where('is_default', true)->where('status', 'active');
+    }
+
+    public function media()
+    {
+        return $this->hasMany(ItemMedia::class)->orderBy('sort_order');
+    }
+
+    public function readyMedia()
+    {
+        return $this->hasMany(ItemMedia::class)
+            ->where('processing_status', 'done')
+            ->orderBy('sort_order');
     }
 
     public function category()
     {
-        return $this->belongsTo(ItemCategory::class);
+        return $this->belongsTo(ItemCategory::class, 'category_id');
     }
 
     public function subcategory()
     {
-        return $this->belongsTo(ItemSubcategory::class);
+        return $this->belongsTo(ItemSubcategory::class, 'subcategory_id');
     }
 
     public function owner()
     {
         return $this->belongsTo(AppOwnerUser::class, 'shop_id', 'shop_id');
     }
-    
-    public function variants()
+
+    // Combo: this item's component items
+    public function comboComponents()
     {
-        return $this->hasMany(ItemVariant::class);
+        return $this->hasMany(ItemComboComponent::class, 'combo_id')
+            ->with(['item:id,item_name,price,offer_price,images,status', 'variant:id,label,price,offer_price']);
     }
 
-    // OPTIONAL: default variant
-    public function defaultVariant()
+    // Combos that include this item as a component
+    public function partOfCombos()
     {
-        return $this->hasOne(ItemVariant::class)->where('is_default', true);
+        return $this->hasMany(ItemComboComponent::class, 'item_id');
     }
 
-    public function getDefaultVariantAttribute()
+    public function offers()
     {
-        return $this->variants()
-            ->where('is_default', true)
-            ->where('status', 'active')
-            ->first();
+        return $this->hasMany(ItemOffer::class, 'item_id')->where('status', true);
+    }
+
+    // ── Accessors ──────────────────────────────────────────────────────────────
+    public function getImageUrlsAttribute(): array
+    {
+        // Prefer processed media table; fall back to legacy JSON column
+        if ($this->relationLoaded('readyMedia') && $this->readyMedia->isNotEmpty()) {
+            return $this->readyMedia->map(fn($m) => asset('storage/' . $m->processed_path))->toArray();
+        }
+        return collect($this->images ?? [])->map(fn($p) => asset('storage/' . $p))->toArray();
+    }
+
+    public function getThumbnailUrlAttribute(): ?string
+    {
+        if ($this->thumbnail_image) {
+            return asset('storage/' . $this->thumbnail_image);
+        }
+        if ($this->relationLoaded('readyMedia')) {
+            $thumb = $this->readyMedia->firstWhere('is_thumbnail', true)
+                ?? $this->readyMedia->first();
+            return $thumb ? asset('storage/' . ($thumb->thumb_path ?? $thumb->processed_path)) : null;
+        }
+        return null;
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    public function isCombo(): bool
+    {
+        return $this->item_type === 'combo';
+    }
+
+    public function effectivePrice(): float
+    {
+        return (float) ($this->offer_price ?? $this->price ?? 0);
     }
 }

@@ -7,107 +7,49 @@ use App\Models\Banner;
 
 class BannerController extends Controller
 {
-    // Add new banner
-    public function addBanner(Request $request)
-    {
-        $request->validate([
-            'title'      => 'nullable|string',
-            'image_url'  => 'required|string',
-            'start_date' => 'nullable|date',
-            'end_date'   => 'nullable|date',
-            'created_by' => 'nullable|numeric'
-        ]);
-
-        $banner = Banner::create($request->all());
-
-        return response()->json([
-            'message' => 'Banner added successfully.',
-            'data' => $banner
-        ]);
-    }
-
-    // Update banner
-    public function updateBanner(Request $request, $id)
-    {
-        $banner = Banner::findOrFail($id);
-
-        $request->validate([
-            'title'      => 'nullable|string',
-            'image_url'  => 'nullable|string',
-            'start_date' => 'nullable|date',
-            'end_date'   => 'nullable|date',
-            'updated_by' => 'nullable|numeric'
-        ]);
-
-        $banner->update($request->all());
-
-        return response()->json([
-            'message' => 'Banner updated successfully.',
-            'data'    => $banner
-        ]);
-    }
-
-    // Activate banner
-    public function activateBanner($id)
-    {
-        $banner = Banner::findOrFail($id);
-
-        $banner->update([
-            'status' => 'active'
-        ]);
-
-        return response()->json([
-            'message' => 'Banner activated successfully.',
-            'data' => $banner
-        ]);
-    }
-
-    // Deactivate banner
-    public function deactivateBanner($id)
-    {
-        $banner = Banner::findOrFail($id);
-
-        $banner->update([
-            'status' => 'inactive'
-        ]);
-
-        return response()->json([
-            'message' => 'Banner deactivated successfully.',
-            'data' => $banner
-        ]);
-    }
-
-    // List only active + valid banners for app
-    public function listActiveBanners()
+    // GET /banners?type=hero  OR  GET /banners/active
+    // Flutter passes ?type=hero; backend just returns all active banners
+    public function listActiveBanners(Request $request)
     {
         $today = now()->toDateString();
 
         $banners = Banner::where('status', 'active')
-            ->where(function ($q) use ($today) {
-                $q->whereNull('start_date')
-                  ->orWhere('start_date', '<=', $today);
-            })
-            ->where(function ($q) use ($today) {
-                $q->whereNull('end_date')
-                  ->orWhere('end_date', '>=', $today);
-            })
-            ->orderBy('id', 'DESC')
+            ->where(fn($q) => $q->whereNull('start_date')->orWhere('start_date', '<=', $today))
+            ->where(fn($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', $today))
+            ->orderByDesc('id')
             ->get();
 
-        return response()->json([
-            'message' => 'Active banners fetched successfully.',
-            'data' => $banners
-        ]);
+        return response()->json(['status' => true, 'data' => $banners]);
     }
 
-    // List all banners (admin)
     public function listAllBanners()
     {
-        $banners = Banner::orderBy('id', 'DESC')->get();
+        return response()->json(['status' => true, 'data' => Banner::orderByDesc('id')->get()]);
+    }
 
-        return response()->json([
-            'message' => 'All banners fetched successfully.',
-            'data' => $banners
-        ]);
+    public function addBanner(Request $request)
+    {
+        $request->validate(['image_url' => 'required|string', 'title' => 'nullable|string']);
+        $banner = Banner::create($request->only('title', 'image_url', 'start_date', 'end_date', 'created_by'));
+        return response()->json(['status' => true, 'message' => 'Banner added', 'data' => $banner]);
+    }
+
+    public function updateBanner(Request $request, $id)
+    {
+        $banner = Banner::findOrFail($id);
+        $banner->update($request->only('title', 'image_url', 'start_date', 'end_date'));
+        return response()->json(['status' => true, 'message' => 'Banner updated', 'data' => $banner]);
+    }
+
+    public function activateBanner($id)
+    {
+        Banner::findOrFail($id)->update(['status' => 'active']);
+        return response()->json(['status' => true, 'message' => 'Activated']);
+    }
+
+    public function deactivateBanner($id)
+    {
+        Banner::findOrFail($id)->update(['status' => 'inactive']);
+        return response()->json(['status' => true, 'message' => 'Deactivated']);
     }
 }

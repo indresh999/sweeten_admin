@@ -314,3 +314,6 @@ Route::get('/admin/get-subcategory-parents/{categoryId}', function ($categoryId)
         ->select('id','name')
         ->get();
 });
+
+require __DIR__.'/web_admin.php';
+require __DIR__.'/web_admin_catalog.php';

@@ -2,177 +2,46 @@
 
 namespace App\Services;
 
-use App\Models\CommissionSetting;
-use App\Models\CommissionRule;
+use App\Models\Item;
 
 class CommissionService
 {
-
-    public static function getCommissionDetails($model, $amount = null)
+    /**
+     * Resolve the best commission rule for an item.
+     * Priority: item > subcategory > category > global default (5%)
+     */
+    public static function getCommissionDetails(Item $item, float $price): array
     {
-        $type = class_basename($model);
-
-        $query = CommissionRule::where('status', 1);
-
-        $query->where(function ($q) use ($model, $type) {
-
-            // ITEM
-            if ($type == 'Item') {
-                $q->where(function ($q2) use ($model) {
-                    $q2->where('type', 'item')
-                       ->where('item_id', $model->id);
-                });
-            }
-
-            // SUBCATEGORY
-            if ($type == 'ItemSubcategory') {
-                $q->orWhere(function ($q2) use ($model) {
-                    $q2->where('type', 'subcategory')
-                       ->where('subcategory_id', $model->id);
-                });
-            }
-
-            // CATEGORY
-            if ($type == 'ItemCategory') {
-                $q->orWhere(function ($q2) use ($model) {
-                    $q2->where('type', 'category')
-                       ->where('category_id', $model->id);
-                });
-            }
-
-            // GLOBAL
-            $q->orWhere('type', 'global');
-        });
-
-        // 🔥 Amount filter
-        if ($amount !== null) {
-            $query->where(function ($q) use ($amount) {
-                $q->whereNull('min_amount')
-                  ->orWhere('min_amount', '<=', $amount);
-            });
-
-            $query->where(function ($q) use ($amount) {
-                $q->whereNull('max_amount')
-                  ->orWhere('max_amount', '>=', $amount);
-            });
+        // Item-level override
+        if (!empty($item->commission_type) && !empty($item->commission_value)) {
+            return ['type' => $item->commission_type, 'value' => (float) $item->commission_value, 'source' => 'item'];
         }
 
-        // 🔥 Highest priority rule
-        $rule = $query->orderByDesc('priority')->first();
-
-        if ($rule) {
-            return [
-                'value' => $rule->commission_percent,
-                'type'  => $rule->commission_type ?? 'percentage',
-                'source'=> 'Rule'
-            ];
-        }
-
-        // ===========================
-        // 🔽 FALLBACK LOGIC
-        // ===========================
-
-        // ITEM
-        if ($type == 'Item') {
-
-            if ($model->commission_percent) {
-                return [
-                    'value' => $model->commission_percent,
-                    'type'  => $model->commission_type ?? 'percentage',
-                    'source'=> 'Item'
-                ];
-            }
-
-            if ($model->subcategory && $model->subcategory->commission_percent) {
-                return [
-                    'value' => $model->subcategory->commission_percent,
-                    'type'  => $model->subcategory->commission_type ?? 'percentage',
-                    'source'=> 'Subcategory'
-                ];
-            }
-
-            if ($model->category && $model->category->commission_percent) {
-                return [
-                    'value' => $model->category->commission_percent,
-                    'type'  => $model->category->commission_type ?? 'percentage',
-                    'source'=> 'Category'
-                ];
+        // Subcategory
+        if ($item->subcategory) {
+            $sub = $item->subcategory;
+            if (!empty($sub->commission_type)) {
+                return ['type' => $sub->commission_type, 'value' => (float) ($sub->commission_percent ?? 0), 'source' => 'subcategory'];
             }
         }
 
-        // SUBCATEGORY
-        if ($type == 'ItemSubcategory') {
-
-            if ($model->commission_percent) {
-                return [
-                    'value' => $model->commission_percent,
-                    'type'  => $model->commission_type ?? 'percentage',
-                    'source'=> 'Subcategory'
-                ];
-            }
-
-            if ($model->category && $model->category->commission_percent) {
-                return [
-                    'value' => $model->category->commission_percent,
-                    'type'  => $model->category->commission_type ?? 'percentage',
-                    'source'=> 'Category'
-                ];
+        // Category
+        if ($item->category) {
+            $cat = $item->category;
+            if (!empty($cat->commission_type)) {
+                return ['type' => $cat->commission_type, 'value' => (float) ($cat->commission_percent ?? 0), 'source' => 'category'];
             }
         }
 
-        // CATEGORY
-        if ($type == 'ItemCategory') {
-
-            if ($model->commission_percent) {
-                return [
-                    'value' => $model->commission_percent,
-                    'type'  => $model->commission_type ?? 'percentage',
-                    'source'=> 'Category'
-                ];
-            }
-        }
-
-        // GLOBAL
-        $global = CommissionSetting::first();
-
-        return [
-            'value' => $global ? $global->commission_percent : 0,
-            'type'  => $global->commission_type ?? 'percentage',
-            'source'=> 'Global'
-        ];
+        // Global default
+        return ['type' => 'percent', 'value' => 5.0, 'source' => 'default'];
     }
 
-
-    /**
-     * 🔥 Final Commission Calculation (IMPORTANT)
-     */
-    public static function calculateCommission($amount, $commission)
+    public static function calculateCommission(float $price, array $commission): float
     {
-        if (!$commission) return 0;
-
-        $type  = $commission['type'] ?? 'percentage';
-        $value = $commission['value'] ?? 0;
-
-        // ✅ Percentage
-        if ($type === 'percentage') {
-            return ($amount * $value) / 100;
+        if ($commission['type'] === 'flat') {
+            return (float) $commission['value'];
         }
-
-        // ✅ Fixed
-        if ($type === 'fixed') {
-            return $value;
-        }
-
-        return 0;
-    }
-
-
-    /**
-     * 🔥 Shortcut (percent only - backward compatible)
-     */
-    public static function getCommissionPercent($model, $amount = null)
-    {
-        $data = self::getCommissionDetails($model, $amount);
-        return $data['value'] ?? 0;
+        return round($price * $commission['value'] / 100, 2);
     }
 }

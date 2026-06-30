@@ -6,292 +6,140 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use App\Models\AppOwnerUser;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\ShopImage;
-use Illuminate\Support\Facades\Storage;
-use Intervention\Image\Facades\Image;
 
 class AppOwnerController extends Controller
 {
+    // ── Register vendor ────────────────────────────────────
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'full_name' => 'required|string|max:100',
-            'email' => 'required|email|unique:app_owner_shops,email',
-            'password' => 'required|string|min:6',
-            'phone_number' => 'nullable|string|max:20',
-            'restaurant_name' => 'required|string|max:100',
+            'full_name'          => 'required|string|max:100',
+            'email'              => 'required|email|unique:app_owner_shops,email',
+            'password'           => 'required|string|min:6',
+            'phone_number'       => 'nullable|string|max:20',
+            'restaurant_name'    => 'required|string|max:100',
             'restaurant_address' => 'nullable|string',
-            'city' => 'nullable|string|max:50',
-            'state' => 'nullable|string|max:50',
-            'zip_code' => 'nullable|string|max:20',
-            'country' => 'nullable|string|max:50',
-            'latitude' => 'nullable|numeric',
-            'longitude' => 'nullable|numeric',
-            'gst_number' => 'nullable|string|max:20',
-            'pan_number' => 'nullable|string|max:20',
+            'city'               => 'nullable|string|max:50',
+            'state'              => 'nullable|string|max:50',
+            'latitude'           => 'nullable|numeric',
+            'longitude'          => 'nullable|numeric',
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
-        $data = $validator->validated();
-
-        // 🔐 PASSWORD HASH
+        $data             = $validator->validated();
         $data['password'] = Hash::make($data['password']);
+        $owner            = AppOwnerUser::create($data);
 
-        $owner = AppOwnerUser::create($data);
-
-        return response()->json([
-            'message' => 'Profile successfully created',
-            'data' => $owner
-        ], 201);
+        return response()->json(['status' => true, 'message' => 'Store registered', 'data' => $owner], 201);
     }
 
-   public function login(Request $request)
+    // ── Vendor login ───────────────────────────────────────
+    public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
+            'email'    => 'required|email',
             'password' => 'required|string',
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
-        $credentials = $validator->validated();
+        $user = AppOwnerUser::where('email', $request->email)->first();
 
-        $user = AppOwnerUser::where('email', $credentials['email'])->first();
-
-        if (! $user) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        // 🔐 HASH PASSWORD CHECK
-        if (! Hash::check($credentials['password'], $user->password)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return response()->json(['status' => false, 'message' => 'Invalid credentials'], 401);
         }
 
         $user->makeHidden(['password']);
-
-        return response()->json([
-            'message' => 'Login successful',
-            'data' => $user
-        ], 200);
+        return response()->json(['status' => true, 'message' => 'Login successful', 'data' => $user]);
     }
 
+    // ── Update vendor ──────────────────────────────────────
     public function update(Request $request, $id)
     {
-       $owner = AppOwnerUser::where('shop_id', $id)->firstOrFail();
-       
-        $validator = Validator::make($request->all(), [
-            'full_name'          => 'sometimes|required|string|max:100',
-            'email' => 'sometimes|required|email|unique:app_owner_shops,email,' . $id . ',shop_id',
-            'password'           => 'sometimes|nullable|string|min:6',
-            'phone_number'       => 'nullable|string|max:20',
-            'restaurant_name'    => 'sometimes|required|string|max:100',
-            'restaurant_address' => 'nullable|string',
-            'city'               => 'nullable|string|max:50',
-            'state'              => 'nullable|string|max:50',
-            'zip_code'           => 'nullable|string|max:20',
-            'country'            => 'nullable|string|max:50',
-            'latitude'           => 'nullable|numeric',
-            'longitude'          => 'nullable|numeric',
-            'gst_number'         => 'nullable|string|max:20',
-            'pan_number'         => 'nullable|string|max:20',
-        ]);
+        $owner = AppOwnerUser::where('shop_id', $id)->firstOrFail();
+        $owner->update($request->except(['password', 'email']));
+        return response()->json(['status' => true, 'message' => 'Updated', 'data' => $owner]);
+    }
 
-        if ($validator->fails()) {
-            return response()->json([
-                'errors' => $validator->errors()
-            ], 422);
+    // ── Nearby shops ───────────────────────────────────────
+    // GET /nearby-shops?latitude=X&longitude=Y&radius=N
+    // Flutter expects: { data: [ { shop_id, restaurant_name, images:[{id,image_path}], distance, ... } ] }
+    public function nearbyShops(Request $request)
+    {
+        $lat    = (float) ($request->latitude  ?? 0);
+        $lng    = (float) ($request->longitude ?? 0);
+        $radius = (float) ($request->radius    ?? 10);
+
+        $shops = AppOwnerUser::with('images:id,shop_id,image_path,tag')
+            ->where('status', 'active')
+            ->when($lat && $lng, function ($q) use ($lat, $lng, $radius) {
+                $q->selectRaw(
+                    'app_owner_shops.*, (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) AS distance',
+                    [$lat, $lng, $lat]
+                )->having('distance', '<=', $radius)->orderBy('distance');
+            }, function ($q) {
+                $q->select('app_owner_shops.*');
+            })
+            ->get();
+
+        return response()->json(['status' => true, 'data' => $shops]);
+    }
+
+    // ── Shop details ───────────────────────────────────────
+    public function getShopDetails($id)
+    {
+        $shop = AppOwnerUser::with('images')->where('shop_id', $id)->first();
+        if (!$shop) {
+            return response()->json(['status' => false, 'message' => 'Shop not found'], 404);
         }
+        return response()->json(['status' => true, 'data' => $shop]);
+    }
 
-        $data = $validator->validated();
+    // ── Shop dashboard ─────────────────────────────────────
+    public function shopDashboard(Request $request)
+    {
+        $shopId = $request->shop_id;
+        return response()->json(['status' => true, 'data' => [
+            'total_orders'   => Order::where('shop_id', $shopId)->count(),
+            'pending_orders' => Order::where('shop_id', $shopId)->where('status', 'pending')->count(),
+            'total_items'    => Item::where('shop_id', $shopId)->count(),
+        ]]);
+    }
 
-        // 🔐 Hash password only if provided
-        if (!empty($data['password'])) {
-            $data['password'] = Hash::make($data['password']);
-        } else {
-            unset($data['password']);
-        }
+    // ── Shop images ────────────────────────────────────────
+    public function uploadShopImage(Request $request)
+    {
+        $request->validate(['shop_id' => 'required', 'image_path' => 'required|string']);
+        $img = ShopImage::create($request->only('shop_id', 'image_path', 'tag'));
+        return response()->json(['status' => true, 'data' => $img]);
+    }
 
-        $owner->update($data);
-        $owner->makeHidden(['password']);
+    public function deleteShopImage($id)
+    {
+        ShopImage::findOrFail($id)->delete();
+        return response()->json(['status' => true, 'message' => 'Image deleted']);
+    }
 
-        return response()->json([
-            'message' => 'Profile updated successfully',
-            'data'    => $owner
-        ], 200);
+    public function listShopImages($shopId)
+    {
+        return response()->json(['status' => true, 'data' => ShopImage::where('shop_id', $shopId)->get()]);
     }
 
     public function toggleStatus($id)
     {
-        $owner = AppOwnerUser::findOrFail($id);
-        $owner->status = $owner->status === 'active' ? 'inactive' : 'active';
-        $owner->save();
-        return response()->json(['message' => 'Owner status updated', 'status' => $owner->status], 200);
-    }
-
-    public function uploadShopImage(Request $request)
-    {
-        $request->validate([
-            'shop_id' => 'required|exists:app_owner_shops,shop_id',
-            'tag' => 'nullable|string|max:100',
-            'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120', 
-        ]);
-
-        $file = $request->file('image');
-
-        $fileName = uniqid().'_'.time().'.'.$file->getClientOriginalExtension();
-
-        $image = Image::make($file->getRealPath());
-        $image->resize(1200, null, function ($constraint) {
-            $constraint->aspectRatio();
-            $constraint->upsize();
-        });
-
-        $path = 'shop_images/'.$fileName;
-        Storage::disk('public')->put($path, (string) $image->encode(null, 75)); 
-
-        $shopImage = ShopImage::create([
-            'shop_id' => $request->shop_id,
-            'tag' => $request->tag,
-            'image_path' => $path,
-        ]);
-
-        return response()->json([
-            'message' => 'Image uploaded successfully server',
-            'data' => $shopImage
-        ]);
-    }
-    public function deleteShopImage($id)
-    {
-        $shopImage = ShopImage::find($id);
-
-        if (!$shopImage) {
-            return response()->json(['message' => 'Image not found'], 404);
-        }
-
-        // Delete file from storage
-        if (Storage::disk('public')->exists($shopImage->image_path)) {
-            Storage::disk('public')->delete($shopImage->image_path);
-        }
-
-        // Delete record from DB
-        $shopImage->delete();
-
-        return response()->json(['message' => 'Image deleted successfully']);
-    }
-
-    public function listShopImages($shop_id)
-    {
-        $images = ShopImage::where('shop_id', $shop_id)->get();
-
-        // Generate full URLs
-        $images->map(function ($img) {
-            $img->image_url = asset('storage/'.$img->image_path);
-            return $img;
-        });
-
-        return response()->json([
-            'message' => 'Shop images fetched successfully',
-            'data' => $images
-        ]);
-    }
-
-    public function getShopDetails($id)
-    {
-        try {
-            $owner = AppOwnerUser::findOrFail($id);
-
-            return response()->json([
-                'message' => 'Shop details fetched successfully',
-                'data' => $owner,
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Shop not found',
-                'error' => $e->getMessage(),
-            ], 404);
-        }
-    }
-
-    public function nearbyShops(Request $request)
-    {
-        $latitude  = $request->latitude;
-        $longitude = $request->longitude;
-
-        if (!$latitude || !$longitude) {
-            return response()->json([
-                'error' => 'latitude and longitude are required.'
-            ], 422);
-        }
-
-        $status = $request->status;     
-        $radius = $request->radius ?? 5; 
-
-        $haversine = "
-            (6371 * acos(
-                cos(radians($latitude)) *
-                cos(radians(latitude)) *
-                cos(radians(longitude) - radians($longitude)) +
-                sin(radians($latitude)) *
-                sin(radians(latitude))
-            ))
-        ";
-
-        $query = AppOwnerUser::select('*')
-            ->selectRaw("$haversine AS distance")
-            ->orderBy('distance', 'ASC')
-            ->whereRaw("$haversine <= ?", [$radius]);
-
-        if ($status) {
-            $query->where('status', $status);
-        }
-
-        $query->with('images:id,shop_id,image_path');
-
-        $shops = $query->limit(100)->get();
-
-        return response()->json([
-            'data' => $shops
-        ], 200);
-    }
-
-    public function shopDashboard(Request $request)
-    {
-        $shop_id = $request->shop_id; 
-
-        if (!$shop_id) {
-            return response()->json(['message' => 'shop_id required'], 400);
-        }
-
-        // Total items
-        $totalItems = Item::where('shop_id', $shop_id)->count();
-
-        // Total orders
-        $totalOrders = Order::where('shop_id', $shop_id)->count();
-
-        // Pending orders (adjust statuses as per your system)
-        $pendingOrders = Order::where('shop_id', $shop_id)
-                            ->where('status', 'pending')
-                            ->count();
-
-        // Total earning (only completed orders)
-        $totalEarnings = Order::where('shop_id', $shop_id)
-                            ->where('status', 'completed')
-                            ->sum('final_amount');
-
-        return response()->json([
-            'shop_id'        => $shop_id,
-            'total_items'    => $totalItems,
-            'total_orders'   => $totalOrders,
-            'pending_orders' => $pendingOrders,
-            'total_earning'  => $totalEarnings,
-        ], 200);
+        $shop   = AppOwnerUser::where('shop_id', $id)->firstOrFail();
+        $status = $shop->status === 'active' ? 'inactive' : 'active';
+        $shop->update(['status' => $status]);
+        return response()->json(['status' => true, 'data' => $shop]);
     }
 }

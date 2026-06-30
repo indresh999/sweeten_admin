@@ -6,13 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Banner extends Model
 {
-    protected $fillable = [
-        'title',
-        'image_url',
-        'start_date',
-        'end_date',
-        'status',
-        'created_by',
-        'updated_by'
-    ];
+    protected $table    = 'banners';
+    protected $fillable = ['title','image_url','banner_type','target_type','target_id','target_url','start_date','end_date','status','sort_order','click_count','is_sponsored'];
+    protected $casts    = ['is_sponsored'=>'boolean'];
 }
