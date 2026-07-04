@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use App\Models\Item;
 use App\Models\ItemVariant;
 use App\Models\AppHomeFilter;
+use App\Models\ItemView;
 use App\Services\CommissionService;
 
 class ItemController extends Controller
@@ -49,6 +50,19 @@ class ItemController extends Controller
         if (!$item) {
             return response()->json(['status' => false, 'message' => 'Item not found.'], 404);
         }
+
+        // Log view asynchronously — best-effort, don't fail the response
+        try {
+            $user    = request()->bearerToken() ? \App\Models\AppUser::where('api_token', request()->bearerToken())->first() : null;
+            $lastOrder = $user ? \App\Models\Order::where('user_id', $user->id)->latest()->first(['city','state']) : null;
+            ItemView::create([
+                'item_id' => $item->id,
+                'shop_id' => $item->shop_id,
+                'user_id' => $user?->id,
+                'city'    => $lastOrder?->city,
+                'state'   => $lastOrder?->state,
+            ]);
+        } catch (\Throwable) {}
 
         $item = $this->applyCommission($this->appendImageUrls($item));
         $default = $item->variants->firstWhere('is_default', true) ?? $item->variants->first();

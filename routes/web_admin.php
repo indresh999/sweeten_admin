@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\AdminEarningsController;
 use App\Http\Controllers\Admin\AdminTaxController;
 use App\Http\Controllers\Admin\AdminSettingsController;
 use App\Http\Controllers\Admin\AdminReportsController;
+use App\Http\Controllers\Admin\AdminMonitorController;
 
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard',           [AdminDashboardController::class,'index'])->name('dashboard');
@@ -120,10 +121,18 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('/reports/orders',      [AdminReportsController::class,'orders'])->name('reports.orders');
     Route::get('/reports/revenue',     [AdminReportsController::class,'revenue'])->name('reports.revenue');
 
+    // Monitor Panel — analytics & insights
+    Route::get('/monitor',                   [AdminMonitorController::class,'index'])->name('monitor.index');
+    Route::get('/monitor/top-products',      [AdminMonitorController::class,'topProducts'])->name('monitor.top-products');
+    Route::get('/monitor/top-shops',         [AdminMonitorController::class,'topShops'])->name('monitor.top-shops');
+    Route::get('/monitor/location',          [AdminMonitorController::class,'locationAnalytics'])->name('monitor.location');
+    Route::get('/monitor/chart-data',        [AdminMonitorController::class,'chartData'])->name('monitor.chart-data');
+
     // Settings
     Route::get('/settings',            [AdminSettingsController::class,'index'])->name('settings.index');
     Route::post('/settings',           [AdminSettingsController::class,'update'])->name('settings.update');
     Route::post('/settings/firebase',  [AdminSettingsController::class,'updateFirebase'])->name('settings.firebase');
     Route::post('/settings/smtp',      [AdminSettingsController::class,'updateSmtp'])->name('settings.smtp');
     Route::post('/settings/gst',       [AdminSettingsController::class,'updateGst'])->name('settings.gst');
+    Route::post('/settings/appinfo',   [AdminSettingsController::class,'updateAppInfo'])->name('settings.appinfo');
 });

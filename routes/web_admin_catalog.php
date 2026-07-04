@@ -3,8 +3,19 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\AdminCategoryController;
 use App\Http\Controllers\Admin\AdminSubcategoryController;
+use App\Http\Controllers\Admin\AdminHomeLayoutController;
+use App\Http\Controllers\Admin\AdminShopHomeLayoutController;
 
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
+
+    // Home Layout configurator (categories)
+    Route::get('/home-layout',       [AdminHomeLayoutController::class, 'index'])->name('home-layout.index');
+    Route::post('/home-layout/save', [AdminHomeLayoutController::class, 'save']) ->name('home-layout.save');
+
+    // Shop Home Layout configurator
+    Route::get ('/shop-home-layout',                [AdminShopHomeLayoutController::class, 'index'])        ->name('shop-home-layout.index');
+    Route::post('/shop-home-layout/featured/save',  [AdminShopHomeLayoutController::class, 'saveFeatured']) ->name('shop-home-layout.featured.save');
+    Route::post('/shop-home-layout/popular/save',   [AdminShopHomeLayoutController::class, 'savePopular'])  ->name('shop-home-layout.popular.save');
 
     Route::prefix('categories')->name('categories.')->group(function () {
         Route::get('/',              [AdminCategoryController::class,'index'])    ->name('index');

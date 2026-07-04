@@ -37,7 +37,7 @@
                     </div>
                     <div class="card-body d-flex flex-wrap gap-2">
                         @forelse($shop->images as $img)
-                            <img src="{{ asset($img->image_path) }}" style="width:90px; height:90px; object-fit:cover;"
+                            <img src="{{ asset('storage/' . $img->image_path) }}" style="width:90px; height:90px; object-fit:cover;"
                                 class="rounded border">
                         @empty
                             <p class="text-muted">No Images Found</p>

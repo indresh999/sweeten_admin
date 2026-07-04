@@ -46,6 +46,18 @@
         </ul>
     </li>
 
+    {{-- Home Layout --}}
+    <li class="nav-item"><a class="nav-link {{ request()->is('admin/home-layout') || request()->is('admin/shop-home-layout') ? 'active' : '' }}" data-bs-toggle="collapse" href="#home-layout-menu" role="button" aria-expanded="{{ request()->is('admin/home-layout') || request()->is('admin/shop-home-layout') ? 'true':'false' }}">
+        <i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none"><path opacity="0.4" d="M9.14373 20.7821V17.7152C9.14378 16.9381 9.77586 16.3088 10.5584 16.3088H13.4326C14.2142 16.3088 14.8453 16.9381 14.8453 17.7152V20.7732C14.8453 21.4473 15.3927 21.9951 16.0695 22H18.0505C19.9302 22 21.4543 20.4849 21.4543 18.5921V9.57467C21.4543 8.74951 21.0768 7.96812 20.4351 7.44697L13.735 2.15641C12.4581 1.14453 10.6386 1.14453 9.36173 2.15641L2.62044 7.44697C1.97875 7.96812 1.60126 8.74951 1.60126 9.57467V18.5921C1.60126 20.4849 3.12542 22 5.00505 22H6.98605C7.67903 22 8.23746 21.447 8.23746 20.7634L8.23746 20.7821H9.14373Z" fill="currentColor"/></svg></i>
+        <span class="item-name">Home Layout</span>
+        <i class="right-icon"><svg width="18" viewBox="0 0 24 24" fill="none"><path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></i>
+    </a>
+        <ul class="sub-nav collapse {{ request()->is('admin/home-layout') || request()->is('admin/shop-home-layout') ? 'show' : '' }}" id="home-layout-menu">
+            <li class="nav-item"><a class="nav-link {{ request()->is('admin/home-layout') ? 'active' : '' }}" href="/admin/home-layout"><i class="sidenav-mini-icon">C</i><span class="item-name">Category Layout</span></a></li>
+            <li class="nav-item"><a class="nav-link {{ request()->is('admin/shop-home-layout') ? 'active' : '' }}" href="/admin/shop-home-layout"><i class="sidenav-mini-icon">S</i><span class="item-name">Shop Home Layout</span></a></li>
+        </ul>
+    </li>
+
     <li class="nav-item static-item mt-2"><a class="nav-link static-item disabled" href="#" tabindex="-1"><span class="default-icon">Commerce</span><span class="mini-icon">-</span></a></li>
     <li class="nav-item"><a class="nav-link {{ request()->routeIs('admin.orders.*') ? 'active' : '' }}" href="{{ route('admin.orders.index') }}">
         <i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none"><path opacity="0.4" d="M9.14373 20.7821V17.7152C9.14378 16.9381 9.77586 16.3088 10.5584 16.3088H13.4326C14.2142 16.3088 14.8453 16.9381 14.8453 17.7152V20.7732C14.8453 21.4473 15.3927 21.9951 16.0695 22H18.0505C19.9302 22 21.4543 20.4849 21.4543 18.5921V9.57467C21.4543 8.74951 21.0768 7.96812 20.4351 7.44697L13.735 2.15641C12.4581 1.14453 10.6386 1.14453 9.36173 2.15641L2.62044 7.44697C1.97875 7.96812 1.60126 8.74951 1.60126 9.57467V18.5921C1.60126 20.4849 3.12542 22 5.00505 22H6.98605C7.67903 22 8.23746 21.447 8.23746 20.7634L8.23746 20.7821H9.14373Z" fill="currentColor"/></svg></i>
@@ -81,6 +93,18 @@
         <i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none"><path opacity="0.4" d="M3 3v18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 16l4-4 4 4 4-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></i>
         <span class="item-name">Reports</span>
     </a></li>
+    <li class="nav-item"><a class="nav-link {{ request()->routeIs('admin.monitor.*') ? 'active' : '' }}" data-bs-toggle="collapse" href="#monitor-menu" role="button" aria-expanded="{{ request()->routeIs('admin.monitor.*') ? 'true':'false' }}">
+        <i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none"><path opacity="0.4" d="M2 12C2 6.48 6.48 2 12 2s10 4.48 10 10-4.48 10-10 10S2 17.52 2 12z" fill="currentColor"/><path d="M8 12l3 3 5-5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></i>
+        <span class="item-name">Monitor</span>
+        <i class="right-icon"><svg width="18" viewBox="0 0 24 24" fill="none"><path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></i>
+    </a>
+        <ul class="sub-nav collapse {{ request()->routeIs('admin.monitor.*') ? 'show' : '' }}" id="monitor-menu">
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('admin.monitor.index') ? 'active' : '' }}" href="{{ route('admin.monitor.index') }}"><i class="sidenav-mini-icon">O</i><span class="item-name">Overview</span></a></li>
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('admin.monitor.top-products') ? 'active' : '' }}" href="{{ route('admin.monitor.top-products') }}"><i class="sidenav-mini-icon">P</i><span class="item-name">Top Products</span></a></li>
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('admin.monitor.top-shops') ? 'active' : '' }}" href="{{ route('admin.monitor.top-shops') }}"><i class="sidenav-mini-icon">S</i><span class="item-name">Top Shops</span></a></li>
+            <li class="nav-item"><a class="nav-link {{ request()->routeIs('admin.monitor.location') ? 'active' : '' }}" href="{{ route('admin.monitor.location') }}"><i class="sidenav-mini-icon">L</i><span class="item-name">Location Analytics</span></a></li>
+        </ul>
+    </li>
 
     <li class="nav-item static-item mt-2"><a class="nav-link static-item disabled" href="#" tabindex="-1"><span class="default-icon">System</span><span class="mini-icon">-</span></a></li>
     <li class="nav-item"><a class="nav-link {{ request()->routeIs('admin.notifications.*') ? 'active' : '' }}" href="{{ route('admin.notifications.index') }}">

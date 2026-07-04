@@ -57,7 +57,7 @@
                                                         $firstImage = $shop->images->first();
                                                     @endphp
                                                     <img class="rounded bg-primary-subtle img-fluid avatar-40 me-3"
-                                                        src="{{ $firstImage ? asset($firstImage->image_path) : asset('https://via.placeholder.com/40x40?text=No+Img') }}"
+                                                        src="{{ $firstImage ? asset('storage/' . $firstImage->image_path) : asset('https://via.placeholder.com/40x40?text=No+Img') }}"
                                                         alt="profile">
                                                     <h6>{{ $shop->restaurant_name ?? 'Unnamed Shop' }}</h6>
                                                 </div>
@@ -80,7 +80,7 @@
                                                 <div class="d-flex flex-wrap">
                                                     @forelse($shop->images->take(4) as $image)
                                                         <div class="me-2 mb-2">
-                                                            <img src="{{ asset($image->image_path) }}" alt="Shop image"
+                                                            <img src="{{ asset('storage/' . $image->image_path) }}" alt="Shop image"
                                                                 width="60" height="60" class="rounded border">
                                                         </div>
                                                     @empty

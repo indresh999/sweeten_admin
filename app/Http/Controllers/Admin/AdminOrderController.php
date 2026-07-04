@@ -26,11 +26,12 @@ class AdminOrderController extends Controller
             ->latest()->paginate(20)->withQueryString();
 
         $summary = [
-            'total'     => Order::when($request->from,fn($q)=>$q->whereDate('created_at','>=',$request->from))->count(),
-            'pending'   => Order::where('status','pending')->count(),
-            'delivered' => Order::where('status','delivered')->count(),
-            'cancelled' => Order::where('status','cancelled')->count(),
-            'revenue'   => (float) Order::where('status','delivered')
+            'total'            => Order::when($request->from,fn($q)=>$q->whereDate('created_at','>=',$request->from))->count(),
+            'pending'          => Order::where('status','pending')->count(),
+            'out_for_delivery' => Order::where('status','out_for_delivery')->count(),
+            'delivered'        => Order::where('status','delivered')->count(),
+            'cancelled'        => Order::where('status','cancelled')->count(),
+            'revenue'          => (float) Order::where('status','delivered')
                 ->when($request->from,fn($q)=>$q->whereDate('created_at','>=',$request->from))->sum('final_amount'),
         ];
 

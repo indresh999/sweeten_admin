@@ -74,7 +74,7 @@
                 <div class="card-body">
                     <div class="d-flex flex-wrap gap-2">
                         @forelse($vendor->images as $img)
-                        <img src="{{ asset($img->image_path) }}" class="rounded border" width="80" height="80" style="object-fit:cover" title="{{ $img->tag }}">
+                        <img src="{{ asset('storage/' . $img->image_path) }}" class="rounded border" width="80" height="80" style="object-fit:cover" title="{{ $img->tag }}">
                         @empty
                         <span class="text-muted">No photos uploaded</span>
                         @endforelse
@@ -94,14 +94,37 @@
                     <table class="table table-sm table-hover align-middle mb-0">
                         <thead class="table-light"><tr><th>#</th><th>Customer</th><th>Amount</th><th>Status</th><th>Date</th><th></th></tr></thead>
                         <tbody>
+                        @php $statusColors=['pending'=>'warning','confirmed'=>'info','preparing'=>'info','out_for_delivery'=>'primary','delivered'=>'success','cancelled'=>'danger']; @endphp
                         @forelse($recentOrders as $o)
+                        @php
+                            $orderItemsJson = json_encode($o->items->map(function($i) {
+                                $snap = is_array($i->item) ? $i->item : [];
+                                return [
+                                    'name'        => $snap['item_name'] ?? 'Item #'.$i->item_id,
+                                    'qty'         => $i->quantity,
+                                    'price'       => $i->price,
+                                    'offer_price' => $i->offer_price,
+                                    'total'       => $i->item_total,
+                                ];
+                            })->values()->toArray());
+                        @endphp
                         <tr>
                             <td>#{{ $o->id }}</td>
                             <td>{{ $o->user?->full_name ?? '—' }}</td>
                             <td>₹{{ number_format($o->final_amount,2) }}</td>
-                            <td>@php $c=['pending'=>'warning','delivered'=>'success','cancelled'=>'danger']; @endphp<span class="badge bg-{{ $c[$o->status]??'secondary' }}">{{ ucfirst($o->status) }}</span></td>
-                            <td class="small text-muted">{{ $o->created_at->format('d M') }}</td>
-                            <td><a href="{{ route('admin.orders.show',$o->id) }}" class="btn btn-sm btn-outline-primary py-0">View</a></td>
+                            <td><span class="badge bg-{{ $statusColors[$o->status]??'secondary' }}">{{ ucfirst(str_replace('_',' ',$o->status)) }}</span></td>
+                            <td class="small text-muted">{{ $o->created_at?->format('d M') ?? '—' }}</td>
+                            <td class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-info py-0"
+                                    data-bs-toggle="modal" data-bs-target="#orderItemsModal"
+                                    data-order="#{{ $o->id }}"
+                                    data-customer="{{ $o->user?->full_name ?? 'Guest' }}"
+                                    data-amount="₹{{ number_format($o->final_amount,2) }}"
+                                    data-items="{{ htmlspecialchars($orderItemsJson, ENT_QUOTES) }}">
+                                    Items
+                                </button>
+                                <a href="{{ route('admin.orders.show',$o->id) }}" class="btn btn-sm btn-outline-primary py-0">View</a>
+                            </td>
                         </tr>
                         @empty
                         <tr><td colspan="6" class="text-center py-3 text-muted">No orders yet</td></tr>
@@ -113,6 +136,79 @@
         </div>
     </div>
 </div>
+
+{{-- Order Items Modal --}}
+<div class="modal fade" id="orderItemsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0" id="orderItemsTitle">Order Items</h5>
+                    <small class="text-muted" id="orderItemsMeta"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Item</th>
+                            <th class="text-end">Price</th>
+                            <th class="text-center">Qty</th>
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orderItemsBody"></tbody>
+                    <tfoot id="orderItemsFoot" class="table-light fw-bold"></tfoot>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@push('js')
+<script>
+document.getElementById('orderItemsModal').addEventListener('show.bs.modal', function(e) {
+    const btn      = e.relatedTarget;
+    const orderId  = btn.dataset.order;
+    const customer = btn.dataset.customer;
+    const amount   = btn.dataset.amount;
+    const items    = JSON.parse(btn.dataset.items || '[]');  // dataset auto-decodes HTML entities
+
+    document.getElementById('orderItemsTitle').textContent = 'Order ' + orderId + ' — Items';
+    document.getElementById('orderItemsMeta').textContent  = 'Customer: ' + customer + '  |  Total: ' + amount;
+
+    const body = document.getElementById('orderItemsBody');
+    const foot = document.getElementById('orderItemsFoot');
+
+    if (!items.length) {
+        body.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No item details available.</td></tr>';
+        foot.innerHTML = '';
+        return;
+    }
+
+    body.innerHTML = items.map((item, i) => {
+        const displayPrice = item.offer_price ? item.offer_price : item.price;
+        const strikePrice  = item.offer_price
+            ? `<small class="text-muted text-decoration-line-through ms-1">₹${parseFloat(item.price).toFixed(2)}</small>`
+            : '';
+        return `<tr>
+            <td class="text-muted small">${i + 1}</td>
+            <td><span class="fw-semibold">${item.name}</span></td>
+            <td class="text-end">₹${parseFloat(displayPrice).toFixed(2)}${strikePrice}</td>
+            <td class="text-center">${item.qty}</td>
+            <td class="text-end fw-bold">₹${parseFloat(item.total).toFixed(2)}</td>
+        </tr>`;
+    }).join('');
+
+    foot.innerHTML = `<tr><td colspan="4" class="text-end">Grand Total</td><td class="text-end">${amount}</td></tr>`;
+});
+</script>
+@endpush
 
 {{-- Email Modal --}}
 <div class="modal fade" id="emailModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">

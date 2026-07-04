@@ -13,7 +13,7 @@ class ItemCategory extends Model
 
     protected $fillable = [
         'category_name','slug','description','image','status','category_type',
-        'is_featured','sort_order',
+        'is_featured','sort_order','home_row','home_sort_order','home_section_id',
         'hsn_code','sac_code',
         'cgst_percent','sgst_percent','igst_percent','cess_percent',
         'gst_percent','is_tax_inclusive',

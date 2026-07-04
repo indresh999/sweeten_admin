@@ -9,6 +9,7 @@
         <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#general">General</a></li>
         <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#firebase" id="firebaseTab">Firebase / FCM</a></li>
         <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#smtp">SMTP / Email</a></li>
+        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#appinfo">App Info</a></li>
     </ul>
 
     <div class="tab-content">
@@ -74,6 +75,47 @@ final token = await FirebaseMessaging.instance.getToken();
                         </select>
                     </div>
                     <div class="col-12"><button class="btn btn-primary">Save SMTP Settings</button></div>
+                </div>
+                </form>
+            </div></div>
+        </div>
+
+        {{-- App Info --}}
+        <div class="tab-pane fade" id="appinfo">
+            <div class="card shadow-sm" style="max-width:700px"><div class="card-body">
+                <div class="alert alert-info small mb-3">These settings are displayed in the mobile app and exposed via the public API endpoint <code>GET /api/app-settings</code>.</div>
+                <form method="POST" action="{{ route('admin.settings.appinfo') }}">@csrf
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">App Version</label>
+                        <input type="text" name="app_version" class="form-control" value="{{ $settings['app_version'] ?? '1.0.0' }}" placeholder="e.g. 1.2.0">
+                        <small class="text-muted">Used by the app to check for updates</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Help Email</label>
+                        <input type="email" name="help_email" class="form-control" value="{{ $settings['help_email'] ?? '' }}" placeholder="support@sweetan.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Help Phone</label>
+                        <input type="text" name="help_phone" class="form-control" value="{{ $settings['help_phone'] ?? '' }}" placeholder="+91 98765 43210">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">About Us</label>
+                        <textarea name="about_us" class="form-control" rows="4" placeholder="About your app/company...">{{ $settings['about_us'] ?? '' }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Privacy Policy</label>
+                        <textarea name="privacy_policy" class="form-control" rows="4" placeholder="Privacy policy content...">{{ $settings['privacy_policy'] ?? '' }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Refund Policy</label>
+                        <textarea name="refund_policy" class="form-control" rows="4" placeholder="Refund policy content...">{{ $settings['refund_policy'] ?? '' }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Cancellation Policy</label>
+                        <textarea name="cancellation_policy" class="form-control" rows="4" placeholder="Cancellation policy content...">{{ $settings['cancellation_policy'] ?? '' }}</textarea>
+                    </div>
+                    <div class="col-12"><button class="btn btn-primary">Save App Info</button></div>
                 </div>
                 </form>
             </div></div>

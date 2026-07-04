@@ -18,6 +18,7 @@ use App\Models\Item;
 use App\Models\Order;
 use App\Models\AppSetting;
 use App\Models\ShopReview;
+use App\Models\ShopView;
 use Intervention\Image\Facades\Image;
 
 class ShopController extends Controller
@@ -420,6 +421,18 @@ class ShopController extends Controller
         $shop->avg_rating   = round(ShopReview::where('shop_id', $shop->shop_id)->where('is_approved', 1)->avg('rating') ?? 0, 1);
         $shop->review_count = ShopReview::where('shop_id', $shop->shop_id)->where('is_approved', 1)->count();
 
+        // Log shop view
+        try {
+            $user      = request()->bearerToken() ? \App\Models\AppUser::where('api_token', request()->bearerToken())->first() : null;
+            $lastOrder = $user ? Order::where('user_id', $user->id)->latest()->first(['city','state']) : null;
+            ShopView::create([
+                'shop_id' => $shop->shop_id,
+                'user_id' => $user?->id,
+                'city'    => $lastOrder?->city,
+                'state'   => $lastOrder?->state,
+            ]);
+        } catch (\Throwable) {}
+
         return response()->json(['status' => true, 'data' => $shop->makeHidden(['password', 'api_token'])]);
     }
 
@@ -520,5 +533,125 @@ class ShopController extends Controller
         $shopId    = $request->user()?->shop_id ?? $request->route('id');
         $schedules = ShopSchedule::where('shop_id', $shopId)->orderBy('day_of_week')->get();
         return response()->json(['status' => true, 'data' => $schedules]);
+    }
+
+    // ── Shop Menu (details + gallery + menu by subcategory) ───────────────────
+    public function shopMenu(int $id): JsonResponse
+    {
+        $shop = AppOwnerUser::with([
+            'images'    => fn($q) => $q->whereNotNull('image_path')->where('image_path', '!=', '')->orderBy('sort_order'),
+            'schedules',
+        ])
+        ->where('status', 'active')
+        ->findOrFail($id);
+
+        $rating      = round((float) (ShopReview::where('shop_id', $id)->where('is_approved', 1)->avg('rating') ?? 0), 1);
+        $reviewCount = (int) ShopReview::where('shop_id', $id)->where('is_approved', 1)->count();
+
+        $images = $shop->images->map(fn($img) => asset('storage/' . $img->image_path))->values();
+
+        $items = Item::with(['subcategory:id,name,sort_order'])
+            ->where('shop_id', $id)
+            ->where('status', 1)
+            ->orderBy('display_order')
+            ->orderBy('item_name')
+            ->get();
+
+        $menu = $items
+            ->groupBy('subcategory_id')
+            ->map(function ($groupItems, $subId) {
+                $sub = $groupItems->first()->subcategory;
+                return [
+                    'id'    => (int) ($subId ?? 0),
+                    'name'  => $sub?->name ?? 'Other',
+                    'sort'  => (int) ($sub?->sort_order ?? 99),
+                    'items' => $groupItems->map(fn($item) => [
+                        'id'          => $item->id,
+                        'name'        => $item->item_name,
+                        'description' => $item->description,
+                        'price'       => (float) $item->price,
+                        'offer_price' => $item->offer_price ? (float) $item->offer_price : null,
+                        'is_veg'      => (bool) $item->is_veg,
+                        'is_featured' => (bool) $item->is_featured,
+                        'badge'       => $item->badge,
+                        'image_url'   => $item->thumbnail_url,
+                        'spice_level' => $item->spice_level,
+                    ])->values(),
+                ];
+            })
+            ->sortBy('sort')
+            ->values();
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'shop' => [
+                    'id'           => $shop->shop_id,
+                    'name'         => $shop->restaurant_name,
+                    'address'      => $shop->restaurant_address,
+                    'city'         => $shop->city,
+                    'area'         => $shop->popular_area,
+                    'rating'       => $rating,
+                    'review_count' => $reviewCount,
+                    'is_open'      => $shop->isOpenNow(),
+                    'images'       => $images,
+                    'logo_url'     => null,
+                ],
+                'menu' => $menu,
+            ],
+        ]);
+    }
+
+    // ── Home: Featured Shops ───────────────────────────────────────────────────
+    public function featured(): JsonResponse
+    {
+        $shops = AppOwnerUser::where('status', 'active')
+            ->where('is_featured', true)
+            ->orderBy('featured_sort_order')
+            ->with(['images' => fn($q) => $q->whereNotNull('image_path')->where('image_path', '!=', '')->orderBy('sort_order')])
+            ->withAvg('reviews as avg_rating', 'rating')
+            ->withCount('reviews as review_count')
+            ->get()
+            ->map(fn($s) => $this->formatShop($s));
+
+        return response()->json(['status' => true, 'data' => $shops]);
+    }
+
+    // ── Home: Popular Shops ────────────────────────────────────────────────────
+    public function popular(): JsonResponse
+    {
+        $shops = AppOwnerUser::where('status', 'active')
+            ->where('is_popular', true)
+            ->orderBy('popular_area')
+            ->orderBy('popular_sort_order')
+            ->with(['images' => fn($q) => $q->whereNotNull('image_path')->where('image_path', '!=', '')->orderBy('sort_order')])
+            ->withAvg('reviews as avg_rating', 'rating')
+            ->withCount('reviews as review_count')
+            ->get();
+
+        $areas = $shops->pluck('popular_area')->filter()->unique()->values();
+
+        return response()->json([
+            'status' => true,
+            'data'   => [
+                'areas' => $areas,
+                'shops' => $shops->map(fn($s) => $this->formatShop($s)),
+            ],
+        ]);
+    }
+
+    private function formatShop(AppOwnerUser $s): array
+    {
+        $img = $s->images->first();
+        return [
+            'id'           => $s->shop_id,
+            'name'         => $s->restaurant_name,
+            'city'         => $s->city,
+            'area'         => $s->popular_area,
+            'image_url'    => $img ? $img->url : null,
+            'rating'       => round((float) ($s->avg_rating ?? 0), 1),
+            'review_count' => (int) ($s->review_count ?? 0),
+            'is_open'      => $s->isOpenNow(),
+        ];
     }
 }

@@ -17,7 +17,7 @@
                         <tr><td class="text-muted">Email</td><td>{{ $customer->email }}</td></tr>
                         <tr><td class="text-muted">Phone</td><td>{{ $customer->phone_number ?? '—' }}</td></tr>
                         <tr><td class="text-muted">Referral</td><td><code>{{ $customer->referral_code ?? '—' }}</code></td></tr>
-                        <tr><td class="text-muted">Joined</td><td>{{ $customer->created_at->format('d M Y') }}</td></tr>
+                        <tr><td class="text-muted">Joined</td><td>{{ $customer->created_at?->format('d M Y') ?? '—' }}</td></tr>
                     </table>
                 </div>
             </div>
@@ -54,7 +54,7 @@
                             <td>{{ $o->owner?->restaurant_name ?? '—' }}</td>
                             <td>₹{{ $o->final_amount }}</td>
                             <td>@php $c=['pending'=>'warning','delivered'=>'success','cancelled'=>'danger']; @endphp<span class="badge bg-{{ $c[$o->status]??'secondary' }}">{{ ucfirst($o->status) }}</span></td>
-                            <td class="small text-muted">{{ $o->created_at->format('d M Y') }}</td>
+                            <td class="small text-muted">{{ $o->created_at?->format('d M Y') ?? '—' }}</td>
                             <td><a href="{{ route('admin.orders.show',$o->id) }}" class="btn btn-sm btn-outline-primary py-0">View</a></td>
                         </tr>
                         @empty

@@ -33,7 +33,7 @@
                 <td>
                     <div class="d-flex align-items-center gap-2">
                         @if($v->images->first())
-                        <img src="{{ asset($v->images->first()->image_path) }}" class="rounded" width="38" height="38" style="object-fit:cover">
+                        <img src="{{ asset('storage/' . $v->images->first()->image_path) }}" class="rounded" width="38" height="38" style="object-fit:cover">
                         @else
                         <div class="avatar avatar-38 bg-primary-subtle rounded d-flex align-items-center justify-content-center"><i class="fas fa-store text-primary"></i></div>
                         @endif

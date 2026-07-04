@@ -22,7 +22,7 @@
                         <tr><td class="text-muted">Vehicle</td><td>{{ ucfirst($boy->vehicle_type ?? '—') }}</td></tr>
                         <tr><td class="text-muted">Active Orders</td><td>{{ $boy->current_active_orders }}</td></tr>
                         <tr><td class="text-muted">Max Orders</td><td>{{ $boy->max_active_orders ?? 3 }}</td></tr>
-                        <tr><td class="text-muted">Joined</td><td>{{ $boy->created_at->format('d M Y') }}</td></tr>
+                        <tr><td class="text-muted">Joined</td><td>{{ $boy->created_at?->format('d M Y') ?? '—' }}</td></tr>
                     </table>
                 </div>
             </div>
@@ -105,7 +105,7 @@
                             <td>{{ $a->order?->owner?->restaurant_name ?? '—' }}</td>
                             @php $ac=['assigned'=>'info','picked'=>'primary','delivered'=>'success','rejected'=>'danger']; @endphp
                             <td><span class="badge bg-{{ $ac[$a->status]??'secondary' }}">{{ ucfirst($a->status) }}</span></td>
-                            <td class="small text-muted">{{ $a->created_at->format('d M') }}</td>
+                            <td class="small text-muted">{{ $a->created_at?->format('d M') ?? '—' }}</td>
                         </tr>
                         @empty
                         <tr><td colspan="4" class="text-center py-3 text-muted">No assignments yet</td></tr>

@@ -67,6 +67,25 @@ class AdminSettingsController extends Controller
         return back()->with('success','GST rate updated.');
     }
 
+    public function updateAppInfo(Request $request)
+    {
+        $request->validate([
+            'app_version'          => 'nullable|string|max:20',
+            'help_email'           => 'nullable|email|max:255',
+            'help_phone'           => 'nullable|string|max:30',
+            'about_us'             => 'nullable|string|max:5000',
+            'privacy_policy'       => 'nullable|string|max:10000',
+            'refund_policy'        => 'nullable|string|max:10000',
+            'cancellation_policy'  => 'nullable|string|max:10000',
+        ]);
+        foreach (['app_version','help_email','help_phone','about_us','privacy_policy','refund_policy','cancellation_policy'] as $key) {
+            if ($request->has($key)) {
+                AppSetting::set($key, $request->input($key, ''));
+            }
+        }
+        return back()->with('success','App info updated.');
+    }
+
     private function writeEnv(array $data): void
     {
         $path    = base_path('.env');

@@ -17,7 +17,7 @@
                   {{-- Featured / Profile Image --}}
                   <div class="form-group">
                      <div class="profile-img-edit position-relative">
-                        <img src="{{ isset($shop) && $shop->images->first() ? asset($shop->images->first()->image_path) : asset('https://via.placeholder.com/100x100?text=No+Image') }}" 
+                        <img src="{{ isset($shop) && $shop->images->first() ? asset('storage/' . $shop->images->first()->image_path) : asset('https://via.placeholder.com/100x100?text=No+Image') }}" 
                              alt="Shop Image" class="profile-pic rounded avatar-100">
                         <div class="upload-icone bg-primary">
                            <svg class="upload-button" width="14" height="14" viewBox="0 0 24 24">

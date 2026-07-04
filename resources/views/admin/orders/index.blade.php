@@ -7,13 +7,14 @@
     </div>
 
     {{-- Summary Cards --}}
-    <div class="row row-cols-2 row-cols-md-5 g-3 mb-4">
+    <div class="row row-cols-2 row-cols-md-6 g-3 mb-4">
         @foreach([
             ['label'=>'Total','value'=>$summary['total'],'color'=>'primary'],
             ['label'=>'Pending','value'=>$summary['pending'],'color'=>'warning'],
+            ['label'=>'Out for Delivery','value'=>$summary['out_for_delivery'],'color'=>'info'],
             ['label'=>'Delivered','value'=>$summary['delivered'],'color'=>'success'],
             ['label'=>'Cancelled','value'=>$summary['cancelled'],'color'=>'danger'],
-            ['label'=>'Revenue','value'=>'₹'.number_format($summary['revenue'],0),'color'=>'info'],
+            ['label'=>'Revenue','value'=>'₹'.number_format($summary['revenue'],0),'color'=>'dark'],
         ] as $s)
         <div class="col"><div class="card shadow-sm border-0 text-center"><div class="card-body py-2">
             <h5 class="mb-0 fw-bold text-{{ $s['color'] }}">{{ $s['value'] }}</h5>

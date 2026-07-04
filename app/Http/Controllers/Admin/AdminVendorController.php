@@ -43,7 +43,7 @@ class AdminVendorController extends Controller
             'pending_orders' => Order::where('shop_id', $id)->where('status','pending')->count(),
             'total_items'    => $vendor->items->count(),
         ];
-        $recentOrders = Order::with('user:id,full_name')->where('shop_id', $id)->latest()->take(10)->get();
+        $recentOrders = Order::with(['user:id,full_name', 'items'])->where('shop_id', $id)->latest()->take(10)->get();
         return view('admin.vendors.show', compact('vendor','stats','recentOrders'));
     }
 

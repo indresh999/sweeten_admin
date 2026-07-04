@@ -53,14 +53,18 @@
         </div>
 
         {{-- Stats Row 2 --}}
-        <div class="row row-cols-2 row-cols-md-4 g-3 mb-4">
+        <div class="row row-cols-2 row-cols-md-5 g-3 mb-4">
             @foreach([
-                ['label'=>'Today Revenue','value'=>'₹'.number_format($stats['today_revenue'],2),'icon'=>'fa-rupee-sign','color'=>'success'],
-                ['label'=>'Month Revenue','value'=>'₹'.number_format($stats['month_revenue'],2),'icon'=>'fa-chart-line','color'=>'primary'],
-                ['label'=>'Range Revenue','value'=>'₹'.number_format($stats['range_revenue'],2),'icon'=>'fa-calendar','color'=>'info'],
-                ['label'=>'Online Riders','value'=>$stats['online_delivery_boys'].' / '.$stats['total_delivery_boys'],'icon'=>'fa-motorcycle','color'=>'warning'],
+                ['label'=>'Today Revenue','value'=>'₹'.number_format($stats['today_revenue'],2),'icon'=>'fa-rupee-sign','color'=>'success','link'=>null],
+                ['label'=>'Month Revenue','value'=>'₹'.number_format($stats['month_revenue'],2),'icon'=>'fa-chart-line','color'=>'primary','link'=>null],
+                ['label'=>'Range Revenue','value'=>'₹'.number_format($stats['range_revenue'],2),'icon'=>'fa-calendar','color'=>'info','link'=>null],
+                ['label'=>'Cancelled Orders','value'=>number_format($stats['cancelled_orders']),'icon'=>'fa-times-circle','color'=>'danger','link'=>route('admin.orders.index',['status'=>'cancelled'])],
+                ['label'=>'Online Riders','value'=>$stats['online_delivery_boys'].' / '.$stats['total_delivery_boys'],'icon'=>'fa-motorcycle','color'=>'warning','link'=>route('admin.delivery.index',['status'=>'online'])],
             ] as $s)
             <div class="col">
+                @if($s['link'])
+                <a href="{{ $s['link'] }}" class="text-decoration-none">
+                @endif
                 <div class="card h-100 border-0 shadow-sm">
                     <div class="card-body d-flex align-items-center gap-3">
                         <div class="avatar avatar-45 rounded-3 bg-{{ $s['color'] }}-subtle text-{{ $s['color'] }} d-flex align-items-center justify-content-center flex-shrink-0">
@@ -72,6 +76,9 @@
                         </div>
                     </div>
                 </div>
+                @if($s['link'])
+                </a>
+                @endif
             </div>
             @endforeach
         </div>

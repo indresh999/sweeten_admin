@@ -794,3 +794,12 @@ body.uikit .btn-download {
   max-height: calc(80vh + 4rem);
   overflow: auto;
 }
+
+/* Fix sidebar scroll on laptop/desktop */
+.sidebar .sidebar-body {
+  overflow-y: auto !important;
+}
+.sidebar .data-scrollbar {
+  max-height: calc(100vh - 80px) !important;
+  overflow-y: auto !important;
+}

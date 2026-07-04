@@ -17,6 +17,8 @@ class AppOwnerUser extends Model
         'restaurant_name', 'restaurant_address', 'city', 'state',
         'zip_code', 'country', 'latitude', 'longitude',
         'gst_number', 'pan_number', 'status',
+        'is_featured', 'featured_sort_order',
+        'is_popular', 'popular_sort_order', 'popular_area',
         'fssai_number', 'bank_account_name', 'bank_account_number',
         'bank_ifsc', 'bank_name', 'last_active_at',
         'otp_code', 'otp_expires_at', 'onboarding_step',
@@ -25,10 +27,14 @@ class AppOwnerUser extends Model
     protected $hidden = ['password', 'otp_code', 'otp_expires_at', 'api_token', 'fcm_token'];
 
     protected $casts = [
-        'latitude'        => 'float',
-        'longitude'       => 'float',
-        'onboarding_step' => 'integer',
-        'otp_expires_at'  => 'datetime',
+        'latitude'             => 'float',
+        'longitude'            => 'float',
+        'onboarding_step'      => 'integer',
+        'otp_expires_at'       => 'datetime',
+        'is_featured'          => 'boolean',
+        'featured_sort_order'  => 'integer',
+        'is_popular'           => 'boolean',
+        'popular_sort_order'   => 'integer',
     ];
 
     // ── Relationships ──────────────────────────────────────

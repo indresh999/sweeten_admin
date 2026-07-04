@@ -22,13 +22,18 @@ use App\Http\Controllers\Api\VendorItemController;
 use App\Http\Controllers\Api\VendorComboController;
 use App\Http\Controllers\Api\VendorOfferController;
 use App\Http\Controllers\Api\VendorOnboardingController;
+use App\Http\Controllers\Api\AppSettingsController;
 
 // ============================================================
 // PUBLIC — HOME / DISCOVERY
 // ============================================================
 Route::get('/home',                [HomeController::class,   'homeData']);
+Route::get('/app-settings',        [AppSettingsController::class, 'index']);
+Route::get('/shops/featured',      [ShopController::class,   'featured']);
+Route::get('/shops/popular',       [ShopController::class,   'popular']);
 Route::get('/nearby-shops',        [ShopController::class,   'nearbyShops']);
 Route::get('/shop/{id}',           [ShopController::class,   'getShopDetails']);
+Route::get('/shop/{id}/menu',      [ShopController::class,   'shopMenu']);
 Route::get('/shop/{id}/schedule',  [ShopController::class,   'getSchedule']);
 Route::get('/shop/{shopId}/reviews', [UserController::class, 'getShopReviews']);
 
