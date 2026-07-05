@@ -7,6 +7,7 @@
     {{-- Tab Nav --}}
     <ul class="nav nav-tabs mb-3" id="settingsTabs">
         <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#general">General</a></li>
+        <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#maps" id="mapsTab">🗺️ Google Maps</a></li>
         <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#firebase" id="firebaseTab">Firebase / FCM</a></li>
         <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#smtp">SMTP / Email</a></li>
         <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#appinfo">App Info</a></li>
@@ -24,6 +25,76 @@
                 <div class="mb-3"><label class="form-label fw-semibold">Delivery Boy Max Radius (km)</label><input type="number" name="delivery_max_boy_radius_km" class="form-control" value="{{ $settings['delivery_max_boy_radius_km'] ?? 15 }}"></div>
                 <button class="btn btn-primary">Save General Settings</button>
                 </form>
+            </div></div>
+        </div>
+
+        {{-- Google Maps --}}
+        <div class="tab-pane fade" id="maps">
+            <div class="card shadow-sm" style="max-width:680px"><div class="card-body">
+
+                <div class="alert alert-info small mb-4">
+                    <strong>How it works:</strong> The API key you enter here is stored securely on the server.
+                    The Flutter app never receives the key directly — all Places search and reverse-geocoding calls
+                    are proxied through your backend API (<code>GET /api/location/autocomplete</code>, <code>/api/location/details</code>, <code>/api/location/reverse</code>).
+                </div>
+
+                <form method="POST" action="{{ route('admin.settings.maps') }}">@csrf
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Google Maps API Key *</label>
+                        <div class="input-group">
+                            <input type="password" name="google_maps_api_key" id="mapsApiKeyInput"
+                                   class="form-control font-monospace"
+                                   value="{{ $settings['google_maps_api_key'] ?? '' }}"
+                                   placeholder="AIzaSy..." required>
+                            <button type="button" class="btn btn-outline-secondary"
+                                    onclick="toggleKey()">
+                                <i class="fa fa-eye" id="mapsEyeIcon"></i>
+                            </button>
+                        </div>
+                        @if(!empty($settings['google_maps_api_key']))
+                            <small class="text-success">✅ Key is set
+                                ({{ strlen($settings['google_maps_api_key']) }} chars,
+                                ends in <code>...{{ substr($settings['google_maps_api_key'], -6) }}</code>)
+                            </small>
+                        @else
+                            <small class="text-danger">⚠️ No key set — location search will not work</small>
+                        @endif
+                    </div>
+                    <button class="btn btn-primary px-4">Save Maps Key</button>
+                </form>
+
+                <hr class="my-4">
+
+                <h6 class="fw-bold mb-3">Setup Guide</h6>
+
+                <div class="alert alert-warning small mb-3">
+                    <strong>⚠️ Common error — REQUEST_DENIED:</strong> This means the required APIs are not enabled for your key's project.
+                    Follow the steps below to fix it.
+                </div>
+
+                <ol class="small text-muted ps-3">
+                    <li class="mb-2">Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console → Credentials</a> and create or copy an API Key</li>
+                    <li class="mb-3">Enable <strong>both</strong> of these APIs in your project's
+                        <a href="https://console.cloud.google.com/apis/library" target="_blank">API Library</a>:
+                        <div class="mt-2 d-flex gap-2 flex-wrap">
+                            <a href="https://console.cloud.google.com/apis/library/places-backend.googleapis.com" target="_blank"
+                               class="btn btn-sm btn-outline-primary">Enable Places API (New) →</a>
+                            <a href="https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com" target="_blank"
+                               class="btn btn-sm btn-outline-primary">Enable Geocoding API →</a>
+                        </div>
+                        <small class="text-muted d-block mt-1">Note: "Places API (New)" ≠ "Places API (legacy)" — make sure you enable the correct one.</small>
+                    </li>
+                    <li class="mb-2">For production, restrict the key: <strong>API restrictions</strong> → select the two APIs above. For IP restriction use your server's public IP.</li>
+                    <li>Paste the key above, save, then test using the URLs below.</li>
+                </ol>
+
+                <div class="bg-light rounded p-3 font-monospace small mt-3">
+<pre># Test autocomplete (from your server / Postman):
+GET {{ url('/api/location/autocomplete') }}?input=Mumbai
+
+# Test reverse geocode:
+GET {{ url('/api/location/reverse') }}?lat=19.0760&lng=72.8777</pre>
+                </div>
             </div></div>
         </div>
 
@@ -123,9 +194,20 @@ final token = await FirebaseMessaging.instance.getToken();
     </div>
 </div>
 <script>
-// Auto-open firebase tab if #firebase in URL
-if(window.location.hash === '#firebase') {
-    document.getElementById('firebaseTab').click();
+const _hash = window.location.hash;
+if (_hash === '#firebase') document.getElementById('firebaseTab').click();
+if (_hash === '#maps')     document.getElementById('mapsTab').click();
+
+function toggleKey() {
+    const inp = document.getElementById('mapsApiKeyInput');
+    const ico = document.getElementById('mapsEyeIcon');
+    if (inp.type === 'password') {
+        inp.type = 'text';
+        ico.className = 'fa fa-eye-slash';
+    } else {
+        inp.type = 'password';
+        ico.className = 'fa fa-eye';
+    }
 }
 </script>
 </x-app-layout>

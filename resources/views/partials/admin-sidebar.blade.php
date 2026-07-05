@@ -107,6 +107,10 @@
     </li>
 
     <li class="nav-item static-item mt-2"><a class="nav-link static-item disabled" href="#" tabindex="-1"><span class="default-icon">System</span><span class="mini-icon">-</span></a></li>
+    <li class="nav-item"><a class="nav-link {{ request()->routeIs('admin.splash.*') ? 'active' : '' }}" href="{{ route('admin.splash.index') }}">
+        <i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none"><path opacity="0.4" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="currentColor"/><path d="M10 8.5l6 3.5-6 3.5V8.5z" fill="white"/></svg></i>
+        <span class="item-name">Splash Screen</span>
+    </a></li>
     <li class="nav-item"><a class="nav-link {{ request()->routeIs('admin.notifications.*') ? 'active' : '' }}" href="{{ route('admin.notifications.index') }}">
         <i class="icon"><svg width="20" viewBox="0 0 24 24" fill="none"><path opacity="0.4" d="M12 2C8.13 2 5 5.13 5 9v7l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="currentColor"/><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2z" fill="currentColor"/></svg></i>
         <span class="item-name">Push Notifications</span>

@@ -19,6 +19,7 @@ use App\Http\Controllers\Admin\AdminTaxController;
 use App\Http\Controllers\Admin\AdminSettingsController;
 use App\Http\Controllers\Admin\AdminReportsController;
 use App\Http\Controllers\Admin\AdminMonitorController;
+use App\Http\Controllers\Admin\AdminSplashController;
 
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard',           [AdminDashboardController::class,'index'])->name('dashboard');
@@ -128,6 +129,13 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('/monitor/location',          [AdminMonitorController::class,'locationAnalytics'])->name('monitor.location');
     Route::get('/monitor/chart-data',        [AdminMonitorController::class,'chartData'])->name('monitor.chart-data');
 
+    // Splash Screen
+    Route::get('/splash',              [AdminSplashController::class,'index'])->name('splash.index');
+    Route::post('/splash',             [AdminSplashController::class,'update'])->name('splash.update');
+    Route::post('/splash/media',       [AdminSplashController::class,'uploadMedia'])->name('splash.media');
+    Route::delete('/splash/media',     [AdminSplashController::class,'removeMedia'])->name('splash.remove');
+    Route::get('/splash/stream',       [AdminSplashController::class,'streamMedia'])->name('splash.stream');
+
     // Settings
     Route::get('/settings',            [AdminSettingsController::class,'index'])->name('settings.index');
     Route::post('/settings',           [AdminSettingsController::class,'update'])->name('settings.update');
@@ -135,4 +143,5 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::post('/settings/smtp',      [AdminSettingsController::class,'updateSmtp'])->name('settings.smtp');
     Route::post('/settings/gst',       [AdminSettingsController::class,'updateGst'])->name('settings.gst');
     Route::post('/settings/appinfo',   [AdminSettingsController::class,'updateAppInfo'])->name('settings.appinfo');
+    Route::post('/settings/maps',      [AdminSettingsController::class,'updateMaps'])->name('settings.maps');
 });

@@ -67,6 +67,15 @@ class AdminSettingsController extends Controller
         return back()->with('success','GST rate updated.');
     }
 
+    public function updateMaps(Request $request)
+    {
+        $request->validate([
+            'google_maps_api_key' => 'required|string|min:10',
+        ]);
+        AppSetting::set('google_maps_api_key', trim($request->google_maps_api_key));
+        return back()->with('success', 'Google Maps API key updated.');
+    }
+
     public function updateAppInfo(Request $request)
     {
         $request->validate([

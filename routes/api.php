@@ -23,12 +23,15 @@ use App\Http\Controllers\Api\VendorComboController;
 use App\Http\Controllers\Api\VendorOfferController;
 use App\Http\Controllers\Api\VendorOnboardingController;
 use App\Http\Controllers\Api\AppSettingsController;
+use App\Http\Controllers\Api\LocationController;
 
 // ============================================================
 // PUBLIC — HOME / DISCOVERY
 // ============================================================
 Route::get('/home',                [HomeController::class,   'homeData']);
 Route::get('/app-settings',        [AppSettingsController::class, 'index']);
+Route::get('/splash-config',       [AppSettingsController::class, 'splashConfig']);
+Route::get('/splash-media',        [AppSettingsController::class, 'splashMedia']);
 Route::get('/shops/featured',      [ShopController::class,   'featured']);
 Route::get('/shops/popular',       [ShopController::class,   'popular']);
 Route::get('/nearby-shops',        [ShopController::class,   'nearbyShops']);
@@ -36,6 +39,15 @@ Route::get('/shop/{id}',           [ShopController::class,   'getShopDetails']);
 Route::get('/shop/{id}/menu',      [ShopController::class,   'shopMenu']);
 Route::get('/shop/{id}/schedule',  [ShopController::class,   'getSchedule']);
 Route::get('/shop/{shopId}/reviews', [UserController::class, 'getShopReviews']);
+
+// ============================================================
+// PUBLIC — LOCATION (proxied through backend, key protected)
+// ============================================================
+Route::prefix('location')->group(function () {
+    Route::get('/autocomplete', [LocationController::class, 'autocomplete']);
+    Route::get('/details',      [LocationController::class, 'details']);
+    Route::get('/reverse',      [LocationController::class, 'reverse']);
+});
 
 // ============================================================
 // PUBLIC — SEARCH

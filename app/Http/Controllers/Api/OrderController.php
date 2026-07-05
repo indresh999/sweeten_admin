@@ -289,43 +289,131 @@ class OrderController extends Controller
     // ── List User Orders ───────────────────────────────────
     public function listUserOrders(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'user_id'   => 'required|exists:app_users,id',
-            'status'    => 'nullable|string',
-            'from_date' => 'nullable|date_format:Y-m-d',
-            'to_date'   => 'nullable|date_format:Y-m-d',
-            'per_page'  => 'nullable|integer|min:1|max:50',
-        ]);
-        if ($validator->fails()) {
-            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        // Resolve user from auth token — no user_id param needed
+        $user   = $request->user();
+        $userId = $user?->id ?? $request->integer('user_id');
+
+        if (!$userId) {
+            return response()->json(['status' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
-        $query = Order::with(['items', 'owner:shop_id,restaurant_name,city', 'timeline'])
-            ->where('user_id', $request->user_id)
-            ->orderByDesc('created_at');
+        $perPage = min((int) $request->get('per_page', 10), 50);
+        $tab     = $request->get('tab', 'all'); // all | active | past
 
-        if ($request->filled('status'))    $query->where('status', $request->status);
-        if ($request->filled('from_date')) $query->whereDate('created_at', '>=', $request->from_date);
-        if ($request->filled('to_date'))   $query->whereDate('created_at', '<=', $request->to_date);
+        $query = Order::with([
+            'items:id,order_id,item_id,quantity,price,offer_price,item_total,item',
+            'owner:shop_id,restaurant_name,city',
+            'owner.images' => fn($q) => $q->whereNotNull('image_path')->where('image_path', '!=', '')->orderBy('sort_order')->limit(1),
+        ])
+        ->where('user_id', $userId)
+        ->orderByDesc('created_at');
 
-        return response()->json(['status' => true, 'data' => $query->paginate($request->get('per_page', 10))]);
+        match ($tab) {
+            'active' => $query->whereIn('status', ['pending', 'accepted', 'preparing', 'ready', 'out_for_delivery']),
+            'past'   => $query->whereIn('status', ['delivered', 'cancelled']),
+            default  => null,
+        };
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $paginated = $query->paginate($perPage);
+
+        $paginated->getCollection()->transform(fn($o) => $this->formatOrderSummary($o));
+
+        return response()->json(['status' => true, 'data' => $paginated]);
+    }
+
+    private function formatOrderSummary(Order $o): array
+    {
+        $items   = $o->items ?? collect();
+        $shopImg = $o->owner?->images->first();
+        $imgUrl  = $shopImg ? asset('storage/' . $shopImg->image_path) : null;
+
+        // item name lives in the JSON snapshot column `item`
+        $names     = $items->take(3)->map(fn($i) => ($i->item['item_name'] ?? 'Item'))->join(', ');
+        $extra     = max(0, $items->count() - 3);
+        $itemsText = $extra > 0 ? "$names +$extra more" : $names;
+
+        return [
+            'id'           => $o->id,
+            'status'       => $o->status,
+            'payment_method' => $o->payment_method,
+            'payment_status' => $o->payment_status,
+            'shop_name'    => $o->owner?->restaurant_name ?? '—',
+            'shop_city'    => $o->owner?->city,
+            'shop_image'   => $imgUrl,
+            'items_text'   => $itemsText,
+            'items_count'  => $items->count(),
+            'subtotal'      => (float) $o->total_amount,
+            'gst_amount'    => (float) ($o->gst_amount     ?? 0),
+            'delivery'      => (float) ($o->delivery_charge ?? 0),
+            'handling_fee'  => (float) ($o->handling_fee   ?? 0),
+            'packing_fee'   => (float) ($o->packing_fee    ?? 0),
+            'discount'      => (float) ($o->discount_amount ?? 0),
+            'final_amount'  => (float) $o->final_amount,
+            'address'      => trim(implode(', ', array_filter([$o->address_line, $o->city]))),
+            'placed_at'    => $o->created_at?->toISOString(),
+            'expected_at'  => $o->expected_delivery_at?->toISOString(),
+            'can_cancel'   => !in_array($o->status, ['cancelled', 'delivered', 'out_for_delivery']),
+            'can_rate'     => $o->status === 'delivered' && is_null($o->rated_at),
+        ];
     }
 
     // ── Get Single Order ───────────────────────────────────
     public function getOrderById(int $id): JsonResponse
     {
+        $user = request()->user();
+
         $order = Order::with([
-            'items', 'owner:shop_id,restaurant_name,restaurant_address,latitude,longitude',
-            'user:id,full_name,phone_number',
-            'timeline', 'assignment.boy:id,full_name,phone_number,vehicle_type',
-            'cancelReason', 'coupon:id,code,title,discount_type,discount_value',
+            'items:id,order_id,item_id,variant_id,quantity,price,offer_price,item_total,item',
+            'owner:shop_id,restaurant_name,restaurant_address,city,latitude,longitude',
+            'owner.images' => fn($q) => $q->whereNotNull('image_path')->where('image_path', '!=', '')->orderBy('sort_order')->limit(1),
+            'timeline:id,order_id,status,message,created_at',
+            'assignment.boy:id,full_name,phone_number,vehicle_type',
+            'cancelReason:id,reason',
+            'coupon:id,code,title,discount_type,discount_value',
         ])->find($id);
 
         if (!$order) {
             return response()->json(['status' => false, 'message' => 'Order not found.'], 404);
         }
 
-        return response()->json(['status' => true, 'data' => $order]);
+        // Ownership guard — only the order's user can fetch it
+        if ($user && (int) $order->user_id !== (int) $user->id) {
+            return response()->json(['status' => false, 'message' => 'Forbidden.'], 403);
+        }
+
+        $shopImg = $order->owner?->images->first();
+
+        return response()->json([
+            'status' => true,
+            'data'   => array_merge($this->formatOrderSummary($order), [
+                'items'         => $order->items->map(fn($i) => [
+                    'name'       => $i->item['item_name'] ?? 'Item',
+                    'variant'    => $i->item['variant_label'] ?? null,
+                    'qty'        => (int) $i->quantity,
+                    'unit_price' => (float) ($i->offer_price ?: $i->price),
+                    'line_total' => (float) $i->item_total,
+                    'is_veg'     => (bool) ($i->item['is_veg'] ?? true),
+                ]),
+                'timeline'      => $order->timeline->map(fn($t) => [
+                    'status'  => $t->status,
+                    'message' => $t->message,
+                    'time'    => $t->created_at?->toISOString(),
+                ]),
+                'shop_address'  => $order->owner?->restaurant_address,
+                'delivery_boy'  => $order->assignment?->boy ? [
+                    'name'    => $order->assignment->boy->full_name,
+                    'phone'   => $order->assignment->boy->phone_number,
+                    'vehicle' => $order->assignment->boy->vehicle_type,
+                ] : null,
+                'coupon_code'   => $order->coupon?->code,
+                'special_notes' => $order->special_instructions,
+                'shop_image'    => $shopImg ? asset('storage/' . $shopImg->image_path) : null,
+            ]),
+        ]);
     }
 
     // ── Cancel Order ───────────────────────────────────────
