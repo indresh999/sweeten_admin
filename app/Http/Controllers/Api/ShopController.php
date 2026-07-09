@@ -131,15 +131,18 @@ class ShopController extends Controller
         $shop  = AppOwnerUser::where('email', $email)->first();
 
         if (!$shop) {
-            // Generic message — don't reveal registration status
-            return response()->json(['status' => true, 'message' => 'If this email is registered, an OTP will be sent shortly.']);
+            return response()->json([
+                'status'  => false,
+                'code'    => 'not_registered',
+                'message' => 'No vendor account found with this email. Please sign up first.',
+            ], 404);
         }
 
         if ($shop->status === 'blocked') {
             return response()->json(['status' => false, 'message' => 'Your store has been suspended. Please contact support.'], 403);
         }
 
-        $otp = random_int(100000, 999999); // 6-digit
+        $otp = random_int(1000, 9999); // 4-digit
 
         $shop->update([
             'otp_code'       => (string) $otp,
@@ -161,7 +164,7 @@ class ShopController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'email'     => 'required|email',
-            'otp'       => 'required|digits:6',
+            'otp'       => 'required|digits:4',
             'fcm_token' => 'nullable|string|max:500',
         ]);
 

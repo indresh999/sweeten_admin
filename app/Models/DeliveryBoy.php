@@ -13,14 +13,18 @@ class DeliveryBoy extends Authenticatable
 
     protected $table = 'delivery_boys';
 
+    protected $guard = 'delivery';
+
     protected $fillable = [
-        'full_name','phone_number','password','picture',
-        'vehicle_type','status','latitude','longitude',
-        'max_active_orders','current_active_orders',
-        'is_verified','last_login_at',
+        'full_name', 'email', 'phone_number', 'password', 'picture',
+        'vehicle_type', 'status', 'latitude', 'longitude',
+        'max_active_orders', 'current_active_orders',
+        'is_verified', 'last_login_at', 'otp', 'otp_expires_at',
+        'fcm_token', 'bank_account_number', 'bank_ifsc',
+        'bank_account_name', 'upi_id',
     ];
 
-    protected $hidden = ['password','remember_token'];
+    protected $hidden = ['password', 'remember_token', 'otp', 'otp_expires_at'];
 
     protected $casts = [
         'latitude'              => 'float',
@@ -29,6 +33,7 @@ class DeliveryBoy extends Authenticatable
         'max_active_orders'     => 'integer',
         'is_verified'           => 'boolean',
         'last_login_at'         => 'datetime',
+        'otp_expires_at'        => 'datetime',
     ];
 
     public function documents()

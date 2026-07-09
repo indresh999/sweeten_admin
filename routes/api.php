@@ -35,9 +35,9 @@ Route::get('/splash-media',        [AppSettingsController::class, 'splashMedia']
 Route::get('/shops/featured',      [ShopController::class,   'featured']);
 Route::get('/shops/popular',       [ShopController::class,   'popular']);
 Route::get('/nearby-shops',        [ShopController::class,   'nearbyShops']);
-Route::get('/shop/{id}',           [ShopController::class,   'getShopDetails']);
-Route::get('/shop/{id}/menu',      [ShopController::class,   'shopMenu']);
-Route::get('/shop/{id}/schedule',  [ShopController::class,   'getSchedule']);
+Route::get('/shop/{id}',           [ShopController::class,   'getShopDetails'])->where('id', '[0-9]+');
+Route::get('/shop/{id}/menu',      [ShopController::class,   'shopMenu'])->where('id', '[0-9]+');
+Route::get('/shop/{id}/schedule',  [ShopController::class,   'getSchedule'])->where('id', '[0-9]+');
 Route::get('/shop/{shopId}/reviews', [UserController::class, 'getShopReviews']);
 
 // ============================================================
@@ -61,6 +61,7 @@ Route::get('/search/suggestions', [SearchController::class, 'suggestions']);
 Route::get('/categories',            [ItemCategoryController::class,    'index']);
 Route::get('/subcategories',         [ItemSubcategoryController::class, 'index']);
 Route::get('/home-filters',          [ItemController::class, 'getAppHomeFilter']);
+Route::get('/items/by-category',      [ItemController::class, 'itemsByCategory']);
 Route::get('/items/by-subcategory',  [ItemController::class, 'itemsBySubcategory']);
 Route::get('/items/similar',         [ItemController::class, 'similarItems']);
 Route::get('/items/by-shop/{id}',    [ItemController::class, 'listByOwner']);
@@ -261,6 +262,13 @@ Route::middleware('auth.shop')->prefix('shop')->group(function () {
 // DELIVERY BOY
 // ============================================================
 Route::prefix('delivery')->group(function () {
+    // Email OTP auth (rate-limited)
+    Route::middleware('throttle:5,1')->group(function () {
+        Route::post('/auth/send-otp',   [DeliveryBoyAuthController::class, 'sendOtp']);
+        Route::post('/auth/verify-otp', [DeliveryBoyAuthController::class, 'verifyOtp']);
+    });
+
+    // Legacy password-based auth
     Route::post('/register', [DeliveryBoyAuthController::class, 'register']);
     Route::post('/login',    [DeliveryBoyAuthController::class, 'login']);
 
@@ -278,16 +286,21 @@ Route::prefix('delivery')->group(function () {
 });
 
 // ============================================================
-// DELIVERY OPS (Admin / auto-system)
+// DELIVERY OPS (delivery boy — auth:sanctum, guard: delivery)
 // ============================================================
-Route::prefix('delivery-ops')->group(function () {
-    Route::post('/auto-assign',  [DeliveryController::class, 'autoAssign']);
-    Route::post('/manual-assign',[DeliveryController::class, 'manualAssign']);
-    Route::post('/accept',       [DeliveryController::class, 'accept']);
-    Route::post('/reject',       [DeliveryController::class, 'reject']);
-    Route::post('/picked',       [DeliveryController::class, 'picked']);
-    Route::post('/delivered',    [DeliveryController::class, 'delivered']);
+Route::prefix('delivery-ops')->middleware('auth:sanctum')->group(function () {
+    Route::post('/accept',            [DeliveryController::class, 'accept']);
+    Route::post('/reject',            [DeliveryController::class, 'reject']);
+    Route::post('/picked',            [DeliveryController::class, 'picked']);
+    Route::post('/delivered',         [DeliveryController::class, 'delivered']);
     Route::get('/timeline/{orderId}', [DeliveryController::class, 'timeline']);
+    Route::get('/pending',            [DeliveryController::class, 'pendingAssignment']);
+});
+
+// Admin-only delivery ops (protected by admin middleware)
+Route::prefix('delivery-ops')->middleware('auth.shop')->group(function () {
+    Route::post('/auto-assign',   [DeliveryController::class, 'autoAssign']);
+    Route::post('/manual-assign', [DeliveryController::class, 'manualAssign']);
 });
 
 // ============================================================

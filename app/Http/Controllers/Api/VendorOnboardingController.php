@@ -42,7 +42,7 @@ class VendorOnboardingController extends Controller
             ], 409);
         }
 
-        $otp = random_int(100000, 999999);
+        $otp = random_int(1000, 9999);
 
         if ($shop) {
             // Draft account exists → refresh OTP
@@ -83,7 +83,7 @@ class VendorOnboardingController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
-            'otp'   => 'required|digits:6',
+            'otp'   => 'required|digits:4',
         ]);
 
         if ($validator->fails()) {
@@ -393,7 +393,7 @@ class VendorOnboardingController extends Controller
             'shop_status'     => $shop->status,
             'onboarding_step' => $shop->onboarding_step,
             'checklist'       => $checklist,
-            'next_step'       => $this->nextStep($checklist),
+            'next_step'       => $this->nextStep($checklist, $shop->status),
             'shop'            => $this->shopSummary($shop),
             'photos'          => $photos->map(fn($p) => $this->formatPhoto($p)),
         ]);
@@ -454,8 +454,11 @@ class VendorOnboardingController extends Controller
         return true;
     }
 
-    private function nextStep(array $checklist): string
+    private function nextStep(array $checklist, string $shopStatus): string
     {
+        if ($shopStatus === 'active')   return 'approved';        // ← distinct from pending
+        if ($shopStatus === 'pending')  return 'awaiting_approval';
+        if ($shopStatus === 'rejected') return 'submit_for_review';
         if (!$checklist['details_filled'])  return 'fill_details';
         if (!$checklist['photos_uploaded']) return 'upload_photos';
         if (!$checklist['submitted'])       return 'submit_for_review';

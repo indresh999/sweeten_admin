@@ -262,6 +262,79 @@ class ItemController extends Controller
         return response()->json(['status' => true, 'item_status' => $item->status]);
     }
 
+    // ── Items by Category ──────────────────────────────────
+    public function itemsByCategory(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'category_id' => 'required|exists:item_categories,id',
+            'shop_id'     => 'nullable|exists:app_owner_shops,shop_id',
+            'is_veg'      => 'nullable|boolean',
+            'sort'        => 'nullable|in:price,rating,popular,newest',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
+
+        $query = Item::with([
+            'category:id,category_name',
+            'subcategory:id,name',
+            'owner:shop_id,restaurant_name,city',
+            'variants' => fn($q) => $q->where('status', 'active')
+                ->select(['id', 'item_id', 'label', 'price', 'offer_price', 'gst_percent', 'is_default', 'status']),
+        ])
+        ->where('category_id', $request->category_id)
+        ->where('status', 'active');
+
+        if ($request->filled('subcategory_id')) {
+            $query->where('subcategory_id', $request->subcategory_id);
+        }
+
+        if ($request->boolean('is_veg')) {
+            $query->where('is_veg', true);
+        }
+
+        // Prioritize user's shop items if shop_id provided
+        if ($request->filled('shop_id')) {
+            $query->orderByRaw('shop_id = ? DESC', [$request->shop_id]);
+        }
+
+        // Apply sorting
+        $sort = $request->input('sort', 'popular');
+        switch ($sort) {
+            case 'price':
+                $query->orderBy('price');
+                break;
+            case 'rating':
+                $query->orderByDesc('rating_avg');
+                break;
+            case 'newest':
+                $query->latest();
+                break;
+            case 'popular':
+            default:
+                $query->orderByDesc('total_sold')
+                    ->orderByDesc('is_featured')
+                    ->orderByDesc('rating_avg');
+                break;
+        }
+
+        $items = $query->paginate($request->integer('per_page', 30));
+        $items->getCollection()->transform(fn($i) => $this->appendImageUrls($i));
+
+        // Subcategories for this category
+        $subcategories = \App\Models\ItemSubcategory::where('category_id', $request->category_id)
+            ->where('status', 1)
+            ->orderBy('sort_order')
+            ->select('id', 'name', 'slug')
+            ->get();
+
+        return response()->json([
+            'status' => true,
+            'data'   => $items,
+            'subcategories' => $subcategories,
+        ]);
+    }
+
     // ── Items by Subcategory ───────────────────────────────
     public function itemsBySubcategory(Request $request): JsonResponse
     {

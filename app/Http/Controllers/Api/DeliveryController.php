@@ -120,15 +120,16 @@ class DeliveryController extends Controller
     public function accept(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'order_id'        => 'required|exists:orders,id',
-            'delivery_boy_id' => 'required|exists:delivery_boys,id',
+            'order_id' => 'required|exists:orders,id',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
+        $boyId = $request->user()->id;
+
         $assignment = DeliveryAssignment::where('order_id', $request->order_id)
-            ->where('delivery_boy_id', $request->delivery_boy_id)
+            ->where('delivery_boy_id', $boyId)
             ->firstOrFail();
 
         $assignment->update(['status' => 'accepted', 'accepted_at' => now()]);
@@ -144,16 +145,17 @@ class DeliveryController extends Controller
     public function reject(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'order_id'        => 'required|exists:orders,id',
-            'delivery_boy_id' => 'required|exists:delivery_boys,id',
-            'reason'          => 'nullable|string|max:255',
+            'order_id' => 'required|exists:orders,id',
+            'reason'   => 'nullable|string|max:255',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
-        $assignment     = DeliveryAssignment::where('order_id', $request->order_id)->firstOrFail();
-        $rejectedBoyId  = $assignment->delivery_boy_id;
+        $rejectedBoyId  = $request->user()->id;
+        $assignment     = DeliveryAssignment::where('order_id', $request->order_id)
+            ->where('delivery_boy_id', $rejectedBoyId)
+            ->firstOrFail();
         $assignment->update(['status' => 'rejected', 'rejected_at' => now()]);
         DeliveryBoy::where('id', $rejectedBoyId)->decrement('current_active_orders');
         $this->addTimeline($request->order_id, 'reassigning', 'Finding another delivery partner');
@@ -175,15 +177,15 @@ class DeliveryController extends Controller
     public function picked(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'order_id'        => 'required|exists:orders,id',
-            'delivery_boy_id' => 'required|exists:delivery_boys,id',
+            'order_id' => 'required|exists:orders,id',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
+        $boyId = $request->user()->id;
         $assignment = DeliveryAssignment::where('order_id', $request->order_id)
-            ->where('delivery_boy_id', $request->delivery_boy_id)
+            ->where('delivery_boy_id', $boyId)
             ->firstOrFail();
         $assignment->update(['status' => 'picked', 'picked_at' => now()]);
 
@@ -199,28 +201,29 @@ class DeliveryController extends Controller
     public function delivered(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'order_id'        => 'required|exists:orders,id',
-            'delivery_boy_id' => 'required|exists:delivery_boys,id',
-            'notes'           => 'nullable|string|max:500',
+            'order_id' => 'required|exists:orders,id',
+            'notes'    => 'nullable|string|max:500',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
+        $boyId = $request->user()->id;
+
         DB::beginTransaction();
         try {
             $assignment = DeliveryAssignment::where('order_id', $request->order_id)
-                ->where('delivery_boy_id', $request->delivery_boy_id)
+                ->where('delivery_boy_id', $boyId)
                 ->firstOrFail();
             $assignment->update(['status' => 'delivered', 'delivered_at' => now()]);
 
             $order = Order::where('id', $request->order_id)->firstOrFail();
-            $order->update(['status' => 'delivered', 'payment_status' => 'paid']);
-            DeliveryBoy::where('id', $request->delivery_boy_id)->decrement('current_active_orders');
+            $order->update(['status' => 'delivered']);
+            DeliveryBoy::where('id', $boyId)->decrement('current_active_orders');
 
             $baseEarning = (float) AppSetting::get('delivery_earn_per_order', 30);
             DeliveryEarning::create([
-                'delivery_boy_id' => $request->delivery_boy_id,
+                'delivery_boy_id' => $boyId,
                 'order_id'        => $request->order_id,
                 'base_earning'    => $baseEarning,
                 'net_earning'     => $baseEarning,
@@ -231,7 +234,7 @@ class DeliveryController extends Controller
             NotificationService::orderDelivered($order->user_id, $order->id);
 
             DB::commit();
-            Log::info('[Delivery] Order #' . $request->order_id . ' delivered by boy #' . $request->delivery_boy_id);
+            Log::info('[Delivery] Order #' . $request->order_id . ' delivered by boy #' . $boyId);
             return response()->json(['status' => true, 'message' => 'Order marked as delivered.']);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -290,25 +293,41 @@ class DeliveryController extends Controller
         return response()->json(['status' => true, 'data' => $order]);
     }
 
+    // ── Pending Assignment (poll for new order) ────────────
+    public function pendingAssignment(Request $request): JsonResponse
+    {
+        $boyId = $request->user()->id;
+
+        $assignment = DeliveryAssignment::with([
+            'order:id,status,final_amount,address_line,city,lat,lng',
+            'order.owner:shop_id,restaurant_name,restaurant_address,latitude,longitude',
+            'order.items:id,order_id,item_name,qty,price',
+        ])
+        ->where('delivery_boy_id', $boyId)
+        ->where('status', 'assigned')
+        ->latest()
+        ->first();
+
+        if (!$assignment) {
+            return response()->json(['status' => true, 'data' => null]);
+        }
+
+        return response()->json(['status' => true, 'data' => $assignment]);
+    }
+
     // ── Delivery Boy's Orders ──────────────────────────────
     public function deliveryBoyOrders(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'delivery_boy_id' => 'required|exists:delivery_boys,id',
-            'status'          => 'nullable|string',
-        ]);
-        if ($validator->fails()) {
-            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
-        }
+        $boyId = $request->user()->id;
 
         $assignments = DeliveryAssignment::with([
-            'order.items',
+            'order:id,status,final_amount,address_line,city',
             'order.owner:shop_id,restaurant_name,restaurant_address',
         ])
-        ->where('delivery_boy_id', $request->delivery_boy_id)
+        ->where('delivery_boy_id', $boyId)
         ->when($request->status, fn($q) => $q->where('status', $request->status))
         ->orderByDesc('id')
-        ->paginate(10);
+        ->paginate(15);
 
         return response()->json(['status' => true, 'data' => $assignments]);
     }
@@ -316,31 +335,32 @@ class DeliveryController extends Controller
     // ── Delivery Boy Earnings ──────────────────────────────
     public function deliveryBoyEarnings(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'delivery_boy_id' => 'required|exists:delivery_boys,id',
-            'period'          => 'nullable|in:today,week,month',
-        ]);
-        if ($validator->fails()) {
-            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
-        }
+        $boyId  = $request->user()->id;
+        $period = $request->get('period', 'today');
 
-        $query = DeliveryEarning::where('delivery_boy_id', $request->delivery_boy_id);
+        $query = DeliveryEarning::where('delivery_boy_id', $boyId);
 
-        switch ($request->get('period', 'today')) {
-            case 'today': $query->whereDate('created_at', today()); break;
-            case 'week':  $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]); break;
-            case 'month': $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year); break;
-        }
+        match ($period) {
+            'week'  => $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]),
+            'month' => $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year),
+            default => $query->whereDate('created_at', today()),
+        };
 
-        $earnings = $query->get();
+        $earnings = $query->orderByDesc('created_at')->get();
+
+        // All-time totals for stats cards
+        $allTime = DeliveryEarning::where('delivery_boy_id', $boyId);
 
         return response()->json([
             'status' => true,
             'data'   => [
-                'total_earned'   => $earnings->sum('net_earning'),
-                'total_orders'   => $earnings->count(),
-                'pending_payout' => $earnings->where('is_paid', false)->sum('net_earning'),
-                'transactions'   => $earnings,
+                'period'          => $period,
+                'total_earned'    => $earnings->sum('net_earning'),
+                'total_orders'    => $earnings->count(),
+                'pending_payout'  => $earnings->where('is_paid', false)->sum('net_earning'),
+                'all_time_earned' => (clone $allTime)->sum('net_earning'),
+                'all_time_orders' => (clone $allTime)->count(),
+                'transactions'    => $earnings,
             ],
         ]);
     }

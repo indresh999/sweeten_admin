@@ -54,7 +54,7 @@
                     @else
                     <div class="rounded border border-dashed d-flex align-items-center justify-content-center text-muted mb-3" style="height:200px;border-style:dashed!important">
                         <div class="text-center">
-                            <i class="fas fa-photo-video fs-2 mb-2 d-block"></i>
+                            <i class="fas fa-photo-film fs-2 mb-2 d-block"></i>
                             <span class="small">No media uploaded</span>
                         </div>
                     </div>
@@ -181,7 +181,7 @@
                             style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" alt="">
                         @else
                         <div id="previewBgEmpty" style="position:absolute;inset:0;background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);display:flex;align-items:center;justify-content:center">
-                            <i class="fas fa-photo-video text-white opacity-25 fs-1"></i>
+                            <i class="fas fa-photo-film text-white opacity-25 fs-1"></i>
                         </div>
                         @endif
 

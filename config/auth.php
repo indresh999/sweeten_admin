@@ -46,6 +46,11 @@ return [
             'provider' => 'users',
             'hash' => false,
         ],
+
+        'delivery' => [
+            'driver'   => 'sanctum',
+            'provider' => 'delivery_boys',
+        ],
     ],
 
     /*
@@ -68,13 +73,13 @@ return [
     'providers' => [
         'users' => [
             'driver' => 'eloquent',
-            'model' => App\Models\User::class,
+            'model'  => App\Models\User::class,
         ],
 
-        // 'users' => [
-        //     'driver' => 'database',
-        //     'table' => 'users',
-        // ],
+        'delivery_boys' => [
+            'driver' => 'eloquent',
+            'model'  => App\Models\DeliveryBoy::class,
+        ],
     ],
 
     /*

@@ -173,7 +173,7 @@
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 <form method="POST" action="{{ route('admin.banners.destroy', $b->id) }}"
-                                      onsubmit="return confirm('Delete this banner?')">
+                                      class="d-inline" onsubmit="return confirm('Delete this banner?')">
                                     @csrf @method('DELETE')
                                     <button class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
                                         <i class="fas fa-trash"></i>
