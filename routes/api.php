@@ -207,6 +207,8 @@ Route::middleware('auth.shop')->prefix('shop')->group(function () {
 
     // Operations — scoped to the authenticated shop automatically
     Route::get('/orders',         [ShopController::class, 'shopOrders']);
+    Route::post('/orders/{id}/update-status', [ShopController::class, 'updateOrderStatus']);
+    Route::get('/orders/stats',   [ShopController::class, 'orderStats']);
     Route::get('/dashboard',      [ShopController::class, 'dashboard']);
     Route::post('/toggle-status', [ShopController::class, 'toggleStatus']);
     Route::put('/schedule',       [ShopController::class, 'updateSchedule']);
@@ -223,6 +225,7 @@ Route::middleware('auth.shop')->prefix('shop')->group(function () {
         Route::post('/',                             [VendorItemController::class, 'store']);
         Route::post('/bulk',                         [VendorItemController::class, 'bulkAction']);
         Route::get('/categories',                    [VendorItemController::class, 'categoryTree']);
+        Route::get('/categories/{categoryId}/subcategories', [VendorItemController::class, 'subcategoriesByCategory']);
         Route::get('/{id}',                          [VendorItemController::class, 'show']);
         Route::put('/{id}',                          [VendorItemController::class, 'update']);
         Route::delete('/{id}',                       [VendorItemController::class, 'destroy']);

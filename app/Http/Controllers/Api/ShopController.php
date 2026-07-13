@@ -377,6 +377,94 @@ class ShopController extends Controller
         ]);
     }
 
+    // ── Update Order Status (vendor) ─────────────────────────────────────────
+    public function updateOrderStatus(Request $request, int $orderId): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:confirmed,preparing,out_for_delivery,delivered,cancelled',
+            'cancel_reason' => 'nullable|string|max:500',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        }
+
+        $sid   = $request->user()->shop_id;
+        $order = Order::where('id', $orderId)->where('shop_id', $sid)->first();
+
+        if (!$order) {
+            return response()->json(['status' => false, 'message' => 'Order not found.'], 404);
+        }
+
+        $allowed = match($request->status) {
+            'confirmed'       => ['pending'],
+            'preparing'       => ['confirmed'],
+            'out_for_delivery'=> ['preparing'],
+            'delivered'       => ['out_for_delivery'],
+            'cancelled'       => ['pending', 'confirmed', 'preparing'],
+            default           => [],
+        };
+
+        if (!in_array($order->status, $allowed)) {
+            return response()->json([
+                'status'  => false,
+                'message' => "Cannot move from '{$order->status}' to '{$request->status}'.",
+            ], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $update = ['status' => $request->status];
+            if ($request->status === 'cancelled' && $request->filled('cancel_reason')) {
+                $update['cancel_remark'] = $request->cancel_reason;
+            }
+            $order->update($update);
+
+            // Timeline
+            $messages = [
+                'confirmed'        => 'Order confirmed by shop',
+                'preparing'        => 'Order is being prepared',
+                'out_for_delivery' => 'Order is ready for pickup',
+                'delivered'        => 'Order delivered successfully',
+                'cancelled'        => 'Order cancelled by shop',
+            ];
+            \DB::table('order_timelines')->insert([
+                'order_id'  => $order->id,
+                'status'    => $request->status,
+                'message'   => $messages[$request->status] ?? 'Status updated',
+                'created_at'=> now(),
+            ]);
+
+            DB::commit();
+            return response()->json([
+                'status'  => true,
+                'message' => 'Order status updated.',
+                'data'    => $order->fresh(),
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('[ShopController] updateOrderStatus failed: '.$e->getMessage());
+            return response()->json(['status' => false, 'message' => 'Failed to update status.'], 500);
+        }
+    }
+
+    // ── Order Stats (vendor) ─────────────────────────────────────────────────
+    public function orderStats(Request $request): JsonResponse
+    {
+        $sid = $request->user()->shop_id;
+        $today = now()->toDateString();
+
+        $stats = [
+            'pending'     => Order::where('shop_id', $sid)->where('status', 'pending')->count(),
+            'confirmed'   => Order::where('shop_id', $sid)->where('status', 'confirmed')->count(),
+            'preparing'   => Order::where('shop_id', $sid)->where('status', 'preparing')->count(),
+            'active'      => Order::where('shop_id', $sid)->whereIn('status', ['pending','confirmed','preparing','out_for_delivery'])->count(),
+            'today'       => Order::where('shop_id', $sid)->whereDate('created_at', $today)->count(),
+            'today_revenue' => (float) Order::where('shop_id', $sid)->whereDate('created_at', $today)->where('status', 'delivered')->sum('total'),
+        ];
+
+        return response()->json(['status' => true, 'data' => $stats]);
+    }
+
     // ── Nearby Shops (public) ──────────────────────────────────────────────────
     public function nearbyShops(Request $request): JsonResponse
     {

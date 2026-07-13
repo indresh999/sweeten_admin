@@ -371,6 +371,23 @@ class VendorItemController extends Controller
         return response()->json(['status' => true, 'data' => $cats]);
     }
 
+    public function subcategoriesByCategory(Request $request, int $categoryId): JsonResponse
+    {
+        $shopId = $request->user()->shop_id;
+
+        $subcats = DB::table('item_subcategories as s')
+            ->leftJoin('items as i', fn($j) => $j->on('i.subcategory_id', '=', 's.id')->where('i.shop_id', $shopId)->whereNull('i.deleted_at'))
+            ->where('s.category_id', $categoryId)
+            ->where('s.status', 1)
+            ->whereNull('s.parent_id')
+            ->groupBy('s.id', 's.name', 's.sort_order', 's.commission_percent')
+            ->orderBy('s.sort_order')
+            ->select('s.id', 's.name', 's.commission_percent', DB::raw('COUNT(i.id) as item_count'))
+            ->get();
+
+        return response()->json(['status' => true, 'data' => $subcats]);
+    }
+
     // ── Private: Helpers ──────────────────────────────────────────────────────
 
     private function itemRules(string $presence = 'required'): array
