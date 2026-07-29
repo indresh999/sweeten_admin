@@ -13,7 +13,10 @@ class LocationController extends Controller
     private function mapsKey(): ?string
     {
         $key = AppSetting::get('google_maps_api_key');
-        return ($key && strlen(trim($key)) > 10) ? trim($key) : null;
+        if ($key && strlen(trim($key)) > 10) return trim($key);
+        // Fallback to .env when admin panel key not yet saved
+        $env = env('GOOGLE_MAPS_API_KEY', '');
+        return strlen(trim($env)) > 10 ? trim($env) : null;
     }
 
     private function apiError(string $googleStatus): JsonResponse
