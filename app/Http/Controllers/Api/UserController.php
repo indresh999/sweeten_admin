@@ -49,12 +49,18 @@ class UserController extends Controller
             'city'         => 'nullable|string|max:100',
             'state'        => 'nullable|string|max:100',
             'pincode'      => 'nullable|string|max:10',
-            'lat'          => 'nullable|numeric',
-            'lng'          => 'nullable|numeric',
+            'lat'          => 'nullable|numeric|between:-90,90',
+            'lng'          => 'nullable|numeric|between:-180,180',
+            'is_default'   => 'nullable|boolean',
         ]);
         if ($validator->fails()) return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+
+        if ($request->boolean('is_default') && !$address->is_default) {
+            UserAddress::where('user_id', $address->user_id)->update(['is_default' => false]);
+        }
+
         $address->update($validator->validated());
-        return response()->json(['status' => true, 'message' => 'Address updated', 'data' => $address]);
+        return response()->json(['status' => true, 'message' => 'Address updated', 'data' => $address->fresh()]);
     }
 
     public function deleteAddress(int $id): JsonResponse
