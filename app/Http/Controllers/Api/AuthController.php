@@ -73,6 +73,9 @@ class AuthController extends Controller
         if (!$user) {
             return response()->json(['status' => false, 'message' => 'Invalid OTP. Please try again.'], 400);
         }
+        if ($user->is_blocked) {
+            return response()->json(['status' => false, 'message' => 'Your account has been suspended.'], 403);
+        }
         if (!$user->otp_expires_at || Carbon::now()->gt($user->otp_expires_at)) {
             return response()->json(['status' => false, 'message' => 'OTP has expired. Please request a new one.'], 400);
         }
@@ -131,7 +134,6 @@ class AuthController extends Controller
     public function updateProfile(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'user_id'      => 'required|exists:app_users,id',
             'full_name'    => 'nullable|string|max:100',
             'phone_number' => 'nullable|string|max:20',
             'dob'          => 'nullable|date',
@@ -143,8 +145,8 @@ class AuthController extends Controller
             return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
-        $user = AppUser::findOrFail($request->user_id);
-        $user->update($validator->safe()->except('user_id'));
+        $user = $request->user();
+        $user->update($validator->validated());
 
         return response()->json(['status' => true, 'message' => 'Profile updated', 'user' => $user->fresh()]);
     }
@@ -152,14 +154,7 @@ class AuthController extends Controller
     // ── Get Profile ────────────────────────────────────────
     public function getProfile(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:app_users,id',
-        ]);
-        if ($validator->fails()) {
-            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
-        }
-
-        $user   = AppUser::findOrFail($request->user_id);
+        $user   = $request->user();
         $wallet = $user->getOrCreateWallet();
 
         return response()->json([
@@ -171,14 +166,7 @@ class AuthController extends Controller
     // ── Delete Account ─────────────────────────────────────
     public function deleteAccount(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:app_users,id',
-        ]);
-        if ($validator->fails()) {
-            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
-        }
-
-        $user = AppUser::findOrFail($request->user_id);
+        $user = $request->user();
         $user->update([
             'is_blocked' => 1,
             'api_token'  => null,

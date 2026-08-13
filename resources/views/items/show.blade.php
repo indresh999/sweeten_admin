@@ -4,14 +4,12 @@
 
     <div class="row">
         <div class="col-md-4">
-    @php
-        $images = $item->images ?? [];
-    @endphp
+    @php $imageUrls = $item->image_urls; @endphp
 
-    @if(count($images))
-        @foreach($images as $img)
+    @if(count($imageUrls))
+        @foreach($imageUrls as $url)
             <img
-                src="{{ asset($img) }}"
+                src="{{ $url }}"
                 class="img-fluid mb-2 rounded border"
                 style="max-height:150px;object-fit:cover;"
             >

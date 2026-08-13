@@ -25,6 +25,7 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         $schedule->command('refresh:database')->twiceDaily(1, 13)->withoutOverlapping();
+        $schedule->command('orders:cancel-unassigned')->everyFiveMinutes()->withoutOverlapping();
     }
 
     /**

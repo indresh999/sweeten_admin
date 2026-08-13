@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             ItemCategorySeeder::class,
             ItemSeeder::class,
             DeliveryBoySeeder::class,
+            DeliveryRejectReasonSeeder::class,
             OrderSeeder::class,
             OrderItemSeeder::class,
             CartSeeder::class,

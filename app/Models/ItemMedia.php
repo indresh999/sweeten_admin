@@ -28,12 +28,18 @@ class ItemMedia extends Model
     public function getUrlAttribute(): ?string
     {
         $path = $this->processed_path ?? $this->original_path;
-        return $path ? asset('storage/' . $path) : null;
+        if (!$path) return null;
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) return $path;
+        return asset('storage/' . $path);
     }
 
     public function getThumbUrlAttribute(): ?string
     {
-        return $this->thumb_path ? asset('storage/' . $this->thumb_path) : $this->url;
+        if ($this->thumb_path) {
+            if (str_starts_with($this->thumb_path, 'http://') || str_starts_with($this->thumb_path, 'https://')) return $this->thumb_path;
+            return asset('storage/' . $this->thumb_path);
+        }
+        return $this->url;
     }
 
     public function isPending(): bool

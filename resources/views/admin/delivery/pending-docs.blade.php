@@ -5,6 +5,7 @@
         <a href="{{ route('admin.delivery.index') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i></a>
         <h4 class="fw-bold mb-0">Pending Documents</h4>
     </div>
+    @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
     <div class="card shadow-sm"><div class="card-body p-0">
         <div class="table-responsive"><table class="table table-hover align-middle mb-0">
             <thead class="table-light"><tr><th>#</th><th>Boy</th><th>Document Type</th><th>Uploaded</th><th>Actions</th></tr></thead>

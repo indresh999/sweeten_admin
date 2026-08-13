@@ -113,6 +113,7 @@ Route::group(['middleware' => 'auth'], function () {
 
     Route::get('/shops/{id}', [ShopController::class, 'show'])->name('shops.show');
     Route::put('/shops/{id}', [ShopController::class, 'update'])->name('shops.update');
+    Route::patch('/shop-documents/{docId}/status', [ShopController::class, 'updateDocumentStatus'])->name('admin.shop.document.status');
     Route::resource('users', UserController::class);
     Route::resource('app-users', AppUserController::class);
 

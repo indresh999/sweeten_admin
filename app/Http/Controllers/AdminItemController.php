@@ -21,7 +21,7 @@ class AdminItemController extends Controller
     {
         $owners = AppOwnerUser::orderBy('restaurant_name')->get();
 
-        $items = Item::with(['category','subcategory','owner','variants'])
+        $items = Item::with(['category','subcategory','owner','variants','readyMedia'])
             ->when($request->shop_id, fn($q) => $q->where('shop_id',$request->shop_id))
             ->latest()
             ->paginate(10);
@@ -122,7 +122,7 @@ class AdminItemController extends Controller
     // ===============================
     public function edit($id)
     {
-        $item = Item::with('variants')->findOrFail($id);
+        $item = Item::with(['variants', 'readyMedia'])->findOrFail($id);
 
         return view('items.edit', [
             'item'          => $item,

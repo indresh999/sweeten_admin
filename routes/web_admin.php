@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\AdminSettingsController;
 use App\Http\Controllers\Admin\AdminReportsController;
 use App\Http\Controllers\Admin\AdminMonitorController;
 use App\Http\Controllers\Admin\AdminSplashController;
+use App\Http\Controllers\Admin\AdminPolicyController;
 
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard',           [AdminDashboardController::class,'index'])->name('dashboard');
@@ -73,6 +74,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('/delivery/docs/pending',[AdminDeliveryController::class,'pendingDocs'])->name('delivery.docs.pending');
     Route::get('/delivery/{id}',       [AdminDeliveryController::class,'show'])->name('delivery.show');
     Route::post('/delivery/{id}/toggle',[AdminDeliveryController::class,'toggle'])->name('delivery.toggle');
+    Route::post('/delivery/{id}/activate',[AdminDeliveryController::class,'activate'])->name('delivery.activate');
+    Route::post('/delivery/{id}/deactivate',[AdminDeliveryController::class,'deactivate'])->name('delivery.deactivate');
     Route::post('/delivery/{id}/verify',[AdminDeliveryController::class,'verify'])->name('delivery.verify');
     Route::post('/delivery/{id}/email',[AdminDeliveryController::class,'sendEmail'])->name('delivery.email');
     Route::get('/delivery/{id}/orders',[AdminDeliveryController::class,'orders'])->name('delivery.orders');
@@ -80,6 +83,12 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::post('/delivery/docs/{id}/approve',[AdminDeliveryController::class,'approveDoc'])->name('delivery.docs.approve');
     Route::post('/delivery/docs/{id}/reject',[AdminDeliveryController::class,'rejectDoc'])->name('delivery.docs.reject');
     Route::post('/delivery/payouts/mark-paid',[AdminDeliveryController::class,'markPaid'])->name('delivery.payouts.paid');
+
+    // Delivery Wallet Management
+    Route::get('/delivery-wallet',                    [AdminDeliveryController::class,'walletIndex'])->name('delivery.wallet.index');
+    Route::get('/delivery-wallet/submissions',         [AdminDeliveryController::class,'walletSubmissions'])->name('delivery.wallet.submissions');
+    Route::post('/delivery-wallet/submissions/{id}/verify', [AdminDeliveryController::class,'walletVerify'])->name('delivery.wallet.verify');
+    Route::put('/delivery-wallet/boys/{boyId}/wallet-limit', [AdminDeliveryController::class,'walletSetLimit'])->name('delivery.wallet.limit');
 
     // Coupons
     Route::get('/coupons',             [AdminCouponController::class,'index'])->name('coupons.index');
@@ -98,6 +107,14 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('/banners/{id}/edit',   [AdminBannerController::class,'edit'])->name('banners.edit');
     Route::put('/banners/{id}',        [AdminBannerController::class,'update'])->name('banners.update');
     Route::delete('/banners/{id}',     [AdminBannerController::class,'destroy'])->name('banners.destroy');
+
+    // Policies
+    Route::get('/policies',             [AdminPolicyController::class,'index'])->name('policies.index');
+    Route::get('/policies/create',      [AdminPolicyController::class,'create'])->name('policies.create');
+    Route::post('/policies',            [AdminPolicyController::class,'store'])->name('policies.store');
+    Route::get('/policies/{id}/edit',   [AdminPolicyController::class,'edit'])->name('policies.edit');
+    Route::put('/policies/{id}',        [AdminPolicyController::class,'update'])->name('policies.update');
+    Route::delete('/policies/{id}',     [AdminPolicyController::class,'destroy'])->name('policies.destroy');
 
     // Push Notifications
     Route::get('/notifications',       [AdminNotificationController::class,'index'])->name('notifications.index');
@@ -142,6 +159,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::post('/settings/firebase',  [AdminSettingsController::class,'updateFirebase'])->name('settings.firebase');
     Route::post('/settings/smtp',      [AdminSettingsController::class,'updateSmtp'])->name('settings.smtp');
     Route::post('/settings/gst',       [AdminSettingsController::class,'updateGst'])->name('settings.gst');
+    Route::post('/settings/payment-qr',[AdminSettingsController::class,'uploadPaymentQr'])->name('settings.payment-qr');
+    Route::delete('/settings/payment-qr',[AdminSettingsController::class,'removePaymentQr'])->name('settings.payment-qr.remove');
     Route::post('/settings/appinfo',   [AdminSettingsController::class,'updateAppInfo'])->name('settings.appinfo');
     Route::post('/settings/maps',      [AdminSettingsController::class,'updateMaps'])->name('settings.maps');
 });

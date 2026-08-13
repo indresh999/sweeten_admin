@@ -17,7 +17,8 @@
     <div class="mb-3">
         <form method="POST" action="{{ route('admin.delivery.payouts.paid') }}">@csrf
             <input type="hidden" name="delivery_boy_id" value="{{ $boy->id }}">
-            <button class="btn btn-success btn-sm" onclick="return confirm('Mark ₹{{ number_format($summary[\'pending\'],2) }} as paid?')">💰 Mark All Pending as Paid</button>
+            @php $pendingFmt = number_format($summary['pending'], 2); @endphp
+            <button class="btn btn-success btn-sm" onclick="return confirm('Mark ₹{{ $pendingFmt }} as paid?')">💰 Mark All Pending as Paid</button>
         </form>
     </div>
     @endif
@@ -31,7 +32,7 @@
                 <td>₹{{ $e->base_earning }}</td>
                 <td><strong>₹{{ $e->net_earning }}</strong></td>
                 <td>@if($e->is_paid)<span class="badge bg-success">Paid</span>@else<span class="badge bg-warning text-dark">Pending</span>@endif</td>
-                <td class="small text-muted">{{ $e->created_at->format('d M Y') }}</td>
+                <td class="small text-muted">{{ $e->created_at?->format('d M Y') ?? '—' }}</td>
             </tr>
             @empty
             <tr><td colspan="5" class="text-center py-4 text-muted">No earnings yet.</td></tr>

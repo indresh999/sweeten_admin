@@ -29,8 +29,10 @@ class AuthShopMiddleware
             return response()->json(['status' => false, 'message' => 'Your store has been suspended. Please contact support.'], 403);
         }
 
-        if ($shop->status === 'pending') {
-            return response()->json(['status' => false, 'message' => 'Your store is pending approval. You will be notified once activated.'], 403);
+        // pending vendors can manage products while awaiting approval
+        // draft vendors are still in onboarding — block product access
+        if ($shop->status === 'draft') {
+            return response()->json(['status' => false, 'message' => 'Please complete your onboarding first.'], 403);
         }
 
         $shop->updateQuietly(['last_active_at' => now()]);

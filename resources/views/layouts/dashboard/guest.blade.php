@@ -3,34 +3,37 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="theme-color" content="#3a57e8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-    <title>{{ config('app.name', 'Laravel') }}</title>
+    <title>{{ config('app.name', 'Sweeten') }} | Login</title>
 
-    <link rel="shortcut icon" href="{{ asset('images/favicon.ico') }}" />
+    <link rel="shortcut icon" href="{{ asset('images/favicon.ico') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
-    <!-- Fonts -->
-    <!-- <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap"> -->
-
-    <!-- Styles -->
-    <link rel="stylesheet" href="{{ asset('css/libs.min.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/hope-ui.css?v=1.0') }}">
-    <!-- remixicon -->
-    <!-- <link rel="stylesheet" href="{{ asset('vendor/remixicon/fonts/remixicon.css') }}"/> -->
-
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+    </style>
 </head>
 
-<body class=" " data-bs-spy="scroll" data-bs-target="#elements-section" data-bs-offset="0" tabindex="0">
+<body>
     <div id="loading">
         @include('partials.dashboard._body_loader')
-        @include('partials.dashboard._head')
     </div>
     <div class="wrapper">
         {{ $slot }}
     </div>
-    @include('partials.dashboard._scripts')
-    {{-- <a class="btn btn-fixed-end btn-secondary btn-icon btn-dashboard" href="/landing-pages/index">Landing Pages</a> --}}
 </body>
 
 </html>

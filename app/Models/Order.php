@@ -69,6 +69,11 @@ class Order extends Model
         return $this->hasMany(DeliveryTimeline::class, 'order_id')->orderBy('created_at');
     }
 
+    public function orderTimeline()
+    {
+        return $this->hasMany(OrderTimeline::class, 'order_id')->orderBy('created_at');
+    }
+
     public function earning()
     {
         return $this->hasOne(DeliveryEarning::class, 'order_id');

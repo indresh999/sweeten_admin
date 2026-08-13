@@ -83,9 +83,16 @@ class AdminCategoryController extends Controller
             $validated['igst_percent'] = $gst;
         }
 
-        $validated['slug']       = Str::slug($validated['category_name']);
-        $validated['is_featured'] = $request->boolean('is_featured');
-        $validated['is_tax_inclusive'] = $request->boolean('is_tax_inclusive');
+        $validated['slug']              = Str::slug($validated['category_name']);
+        $validated['is_featured']       = $request->boolean('is_featured');
+        $validated['is_tax_inclusive']  = $request->boolean('is_tax_inclusive');
+        $validated['gst_percent']       = (float)($validated['gst_percent']        ?? 0);
+        $validated['cgst_percent']      = (float)($validated['cgst_percent']       ?? 0);
+        $validated['sgst_percent']      = (float)($validated['sgst_percent']       ?? 0);
+        $validated['igst_percent']      = (float)($validated['igst_percent']       ?? 0);
+        $validated['cess_percent']      = (float)($validated['cess_percent']       ?? 0);
+        $validated['commission_percent']= (float)($validated['commission_percent'] ?? 0);
+        $validated['sort_order']        = (int)($validated['sort_order']           ?? 0);
 
         if ($request->hasFile('image')) {
             $validated['image'] = 'storage/'.$request->file('image')->store('categories','public');
@@ -147,8 +154,15 @@ class AdminCategoryController extends Controller
             $validated['igst_percent'] = $gst;
         }
 
-        $validated['is_featured']      = $request->boolean('is_featured');
-        $validated['is_tax_inclusive'] = $request->boolean('is_tax_inclusive');
+        $validated['is_featured']       = $request->boolean('is_featured');
+        $validated['is_tax_inclusive']  = $request->boolean('is_tax_inclusive');
+        $validated['gst_percent']       = (float)($validated['gst_percent']        ?? $category->gst_percent        ?? 0);
+        $validated['cgst_percent']      = (float)($validated['cgst_percent']       ?? $category->cgst_percent       ?? 0);
+        $validated['sgst_percent']      = (float)($validated['sgst_percent']       ?? $category->sgst_percent       ?? 0);
+        $validated['igst_percent']      = (float)($validated['igst_percent']       ?? $category->igst_percent       ?? 0);
+        $validated['cess_percent']      = (float)($validated['cess_percent']       ?? $category->cess_percent       ?? 0);
+        $validated['commission_percent']= (float)($validated['commission_percent'] ?? $category->commission_percent ?? 0);
+        $validated['sort_order']        = (int)($validated['sort_order']           ?? $category->sort_order         ?? 0);
 
         if ($request->hasFile('image')) {
             if ($category->image) Storage::disk('public')->delete(str_replace('storage/','',$category->image));

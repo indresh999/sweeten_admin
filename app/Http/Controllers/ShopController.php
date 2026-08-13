@@ -17,7 +17,7 @@ class ShopController extends Controller
 
     public function show($id)
     {
-        $shop = AppOwnerUser::with('images')->findOrFail($id);
+        $shop = AppOwnerUser::with(['images', 'documents'])->findOrFail($id);
 
         // Load shop orders
         $orders = \App\Models\Order::with(['user', 'items.item'])
@@ -26,7 +26,7 @@ class ShopController extends Controller
             ->get();
 
         // Load shop items
-        $items = \App\Models\Item::with(['category'])
+        $items = \App\Models\Item::with(['category', 'readyMedia'])
             ->where('shop_id', $id)
             ->orderBy('id', 'desc')
             ->get();
@@ -76,13 +76,20 @@ public function edit($id)
                 $path = $image->store('uploads/shops', 'public');
 
                 $shop->images()->create([
-                    'image_path' => 'storage/' . $path,
+                    'image_path' => $path,
                 ]);
             }
         }
 
         return redirect()->route('shops')->with('success', 'Shop updated successfully!');
     }
+public function updateDocumentStatus(\Illuminate\Http\Request $request, int $docId)
+{
+    $doc = \App\Models\ShopDocument::findOrFail($docId);
+    $doc->update(['status' => $request->input('status', 'pending')]);
+    return back()->with('success', 'Document status updated.');
+}
+
 public function orderDetails($id)
 {
     $order = \App\Models\Order::with([

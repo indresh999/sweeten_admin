@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CouponController;
 use App\Http\Controllers\Api\DealController;
 use App\Http\Controllers\Api\DeliveryBoyAuthController;
 use App\Http\Controllers\Api\DeliveryController;
+use App\Http\Controllers\Api\DeliveryWalletController;
 use App\Http\Controllers\Api\HomeController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\ItemCategoryController;
@@ -23,6 +24,8 @@ use App\Http\Controllers\Api\VendorComboController;
 use App\Http\Controllers\Api\VendorOfferController;
 use App\Http\Controllers\Api\VendorOnboardingController;
 use App\Http\Controllers\Api\AppSettingsController;
+use App\Http\Controllers\Api\GooglePlacesController;
+use App\Http\Controllers\Api\DeliveryBoyOnboardingController;
 use App\Http\Controllers\Api\LocationController;
 
 // ============================================================
@@ -31,7 +34,15 @@ use App\Http\Controllers\Api\LocationController;
 Route::get('/home',                [HomeController::class,   'homeData']);
 Route::get('/app-settings',        [AppSettingsController::class, 'index']);
 Route::get('/splash-config',       [AppSettingsController::class, 'splashConfig']);
+Route::get('/payment-qr',          [AppSettingsController::class, 'paymentQr']);
 Route::get('/splash-media',        [AppSettingsController::class, 'splashMedia']);
+Route::get('/policies',            [AppSettingsController::class, 'policies']);
+
+// ============================================================
+// PUBLIC — GOOGLE PLACES (city search)
+// ============================================================
+Route::get('/places/autocomplete', [GooglePlacesController::class, 'autocomplete']);
+Route::get('/places/details',      [GooglePlacesController::class, 'placeDetails']);
 Route::get('/shops/featured',      [ShopController::class,   'featured']);
 Route::get('/shops/popular',       [ShopController::class,   'popular']);
 Route::get('/nearby-shops',        [ShopController::class,   'nearbyShops']);
@@ -85,8 +96,8 @@ Route::post('/coupons/validate',  [CouponController::class, 'validateCoupon']);
 // USER AUTH (public — no token needed)
 // ============================================================
 Route::prefix('auth')->group(function () {
-    Route::post('/send-otp',    [AuthController::class, 'sendOtp']);
-    Route::post('/verify-otp',  [AuthController::class, 'verifyOtp']);
+    Route::post('/send-otp',    [AuthController::class, 'sendOtp'])->middleware('throttle:5,1');
+    Route::post('/verify-otp',  [AuthController::class, 'verifyOtp'])->middleware('throttle:10,1');
 });
 
 // ============================================================
@@ -186,10 +197,14 @@ Route::prefix('shop')->group(function () {
 Route::middleware('auth.onboarding')->prefix('shop/onboarding')->group(function () {
     Route::get('/status',         [VendorOnboardingController::class, 'getStatus']);
     Route::put('/details',        [VendorOnboardingController::class, 'updateDetails']);
+    Route::put('/payment',        [VendorOnboardingController::class, 'updatePayment']);
     Route::post('/photos',        [VendorOnboardingController::class, 'uploadPhotos']);
     Route::get('/photos',         [VendorOnboardingController::class, 'listPhotos']);
     Route::delete('/photos/{id}', [VendorOnboardingController::class, 'deletePhoto']);
     Route::post('/photos/reorder',[VendorOnboardingController::class, 'reorderPhotos']);
+    Route::post('/documents',        [VendorOnboardingController::class, 'uploadDocument']);
+    Route::get('/documents',         [VendorOnboardingController::class, 'listDocuments']);
+    Route::delete('/documents/{id}', [VendorOnboardingController::class, 'deleteDocument']);
     Route::post('/submit',        [VendorOnboardingController::class, 'submitForReview']);
 });
 
@@ -224,6 +239,7 @@ Route::middleware('auth.shop')->prefix('shop')->group(function () {
         Route::get('/',                              [VendorItemController::class, 'index']);
         Route::post('/',                             [VendorItemController::class, 'store']);
         Route::post('/bulk',                         [VendorItemController::class, 'bulkAction']);
+        Route::get('/units',                         [VendorItemController::class, 'units']);
         Route::get('/categories',                    [VendorItemController::class, 'categoryTree']);
         Route::get('/categories/{categoryId}/subcategories', [VendorItemController::class, 'subcategoriesByCategory']);
         Route::get('/{id}',                          [VendorItemController::class, 'show']);
@@ -276,15 +292,30 @@ Route::prefix('delivery')->group(function () {
     Route::post('/login',    [DeliveryBoyAuthController::class, 'login']);
 
     Route::middleware('auth:sanctum')->group(function () {
-        Route::post('/logout',       [DeliveryBoyAuthController::class, 'logout']);
-        Route::get('/me',            [DeliveryBoyAuthController::class, 'me']);
-        Route::put('/me',            [DeliveryBoyAuthController::class, 'update']);
-        Route::post('/location',     [DeliveryBoyAuthController::class, 'updateLocation']);
-        Route::post('/availability', [DeliveryBoyAuthController::class, 'toggleAvailability']);
-        Route::post('/documents',    [DeliveryBoyAuthController::class, 'uploadDocument']);
-        Route::get('/documents',     [DeliveryBoyAuthController::class, 'listDocuments']);
-        Route::get('/earnings',      [DeliveryController::class, 'deliveryBoyEarnings']);
-        Route::get('/orders',        [DeliveryController::class, 'deliveryBoyOrders']);
+        Route::post('/logout',          [DeliveryBoyAuthController::class, 'logout']);
+        Route::get('/me',               [DeliveryBoyAuthController::class, 'me']);
+        Route::put('/me',               [DeliveryBoyAuthController::class, 'update']);
+        Route::post('/photo',           [DeliveryBoyAuthController::class, 'uploadPhoto']);
+        Route::post('/location',        [DeliveryBoyAuthController::class, 'updateLocation']);
+        Route::post('/availability',    [DeliveryBoyAuthController::class, 'toggleAvailability']);
+        Route::post('/documents',       [DeliveryBoyAuthController::class, 'uploadDocument']);
+        Route::get('/documents',        [DeliveryBoyAuthController::class, 'listDocuments']);
+        Route::get('/document-status',  [DeliveryBoyAuthController::class, 'documentStatus']);
+        Route::get('/earnings',         [DeliveryController::class, 'deliveryBoyEarnings']);
+        Route::get('/orders',           [DeliveryController::class, 'deliveryBoyOrders']);
+
+        // Onboarding flow
+        Route::prefix('onboarding')->group(function () {
+            Route::get('/status',       [DeliveryBoyOnboardingController::class, 'getStatus']);
+            Route::put('/details',      [DeliveryBoyOnboardingController::class, 'updateDetails']);
+            Route::post('/photo',       [DeliveryBoyOnboardingController::class, 'uploadPhoto']);
+            Route::post('/document',    [DeliveryBoyOnboardingController::class, 'uploadDocument']);
+            Route::post('/submit',      [DeliveryBoyOnboardingController::class, 'submitForReview']);
+        });
+
+        // Wallet & Cash Submission
+        Route::get('/wallet',            [DeliveryWalletController::class, 'walletInfo']);
+        Route::post('/submit-cash',      [DeliveryWalletController::class, 'submitCash']);
     });
 });
 
@@ -298,12 +329,23 @@ Route::prefix('delivery-ops')->middleware('auth:sanctum')->group(function () {
     Route::post('/delivered',         [DeliveryController::class, 'delivered']);
     Route::get('/timeline/{orderId}', [DeliveryController::class, 'timeline']);
     Route::get('/pending',            [DeliveryController::class, 'pendingAssignment']);
+    Route::get('/reject-reasons',     [DeliveryController::class, 'getRejectReasons']);
 });
 
 // Admin-only delivery ops (protected by admin middleware)
 Route::prefix('delivery-ops')->middleware('auth.shop')->group(function () {
     Route::post('/auto-assign',   [DeliveryController::class, 'autoAssign']);
     Route::post('/manual-assign', [DeliveryController::class, 'manualAssign']);
+});
+
+// ============================================================
+// ADMIN — DELIVERY WALLET MANAGEMENT
+// ============================================================
+Route::prefix('admin/delivery-wallet')->middleware('auth.shop')->group(function () {
+    Route::get('/submissions',                [DeliveryWalletController::class, 'adminListSubmissions']);
+    Route::post('/submissions/{id}/verify',   [DeliveryWalletController::class, 'adminVerifySubmission']);
+    Route::get('/boys',                       [DeliveryWalletController::class, 'adminListBoys']);
+    Route::put('/boys/{boyId}/wallet-limit',  [DeliveryWalletController::class, 'adminSetWalletLimit']);
 });
 
 // ============================================================

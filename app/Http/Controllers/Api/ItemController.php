@@ -407,7 +407,7 @@ class ItemController extends Controller
             : json_decode($item->images ?? '[]', true);
 
         $item->image_urls = collect($images ?? [])
-            ->map(fn($p) => asset('storage/' . $p))
+            ->map(fn($p) => (str_starts_with($p, 'http://') || str_starts_with($p, 'https://')) ? $p : asset('storage/' . $p))
             ->toArray();
 
         return $item;

@@ -2,7 +2,10 @@
 
 <div class="container py-4">
 
-    <h3 class="mb-4">Delivery Boy Management</h3>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="mb-0">Delivery Boy Management</h3>
+        <a href="{{ route('admin.delivery.wallet.index') }}" class="btn btn-warning">Wallet Management</a>
+    </div>
 
     <div class="card shadow-sm">
         <div class="card-body">
@@ -13,6 +16,7 @@
                         <th>#</th>
                         <th>Name</th>
                         <th>Phone</th>
+                        <th>Wallet</th>
                         <th>Verification</th>
                         <th>Document Status</th>
                         <th>Working Status</th>
@@ -25,7 +29,18 @@
                         <tr>
                             <td>{{ $index + 1 }}</td>
                             <td>{{ $boy->full_name }}</td>
-                            <td>{{ $boy->phone }}</td>
+                            <td>{{ $boy->phone_number }}</td>
+
+                            <td>
+                                @if($boy->wallet_limit > 0)
+                                    <span class="text-muted">₹{{ number_format($boy->wallet_collected, 0) }} / ₹{{ number_format($boy->wallet_limit, 0) }}</span>
+                                    @if($boy->has_pending_submission)
+                                        <br><span class="badge bg-danger mt-1">Pending</span>
+                                    @endif
+                                @else
+                                    <span class="text-muted">No limit</span>
+                                @endif
+                            </td>
 
                             <td>
                                 <span class="badge bg-{{ $boy->is_verified ? 'success' : 'danger' }}">
@@ -79,7 +94,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7">No delivery boys found.</td></tr>
+                        <tr><td colspan="8">No delivery boys found.</td></tr>
                     @endforelse
                 </tbody>
             </table>

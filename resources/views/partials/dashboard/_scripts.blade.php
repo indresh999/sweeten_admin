@@ -1,3 +1,6 @@
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <!-- Backend Bundle JavaScript -->
 <script src="{{ asset('js/libs.min.js')}}"></script>
 @if(in_array('data-table',$assets ?? []))

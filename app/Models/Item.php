@@ -11,11 +11,11 @@ class Item extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'shop_id', 'category_id', 'subcategory_id',
+        'shop_id', 'category_id', 'subcategory_id', 'unit_id',
         'item_name', 'slug', 'description', 'item_type',
         'price', 'offer_price',
         'min_quantity', 'max_quantity', 'weight_or_piece', 'allow_custom_notes',
-        'is_veg', 'is_jain', 'spice_level', 'preparation_time',
+        'is_veg', 'is_jain', 'contains_egg', 'spice_level', 'preparation_time',
         'is_featured', 'display_order', 'badge', 'status',
         'images', 'thumbnail_image', 'video_url',
         'gst_percent', 'cgst', 'sgst', 'igst', 'hsn_code', 'cess_percent', 'is_tax_inclusive',
@@ -28,6 +28,7 @@ class Item extends Model
         'images'           => 'array',
         'is_veg'           => 'boolean',
         'is_jain'          => 'boolean',
+        'contains_egg'     => 'boolean',
         'is_featured'      => 'boolean',
         'allow_custom_notes' => 'boolean',
         'is_tax_inclusive' => 'boolean',
@@ -113,22 +114,24 @@ class Item extends Model
     // ── Accessors ──────────────────────────────────────────────────────────────
     public function getImageUrlsAttribute(): array
     {
-        // Prefer processed media table; fall back to legacy JSON column
         if ($this->relationLoaded('readyMedia') && $this->readyMedia->isNotEmpty()) {
-            return $this->readyMedia->map(fn($m) => asset('storage/' . $m->processed_path))->toArray();
+            return $this->readyMedia->map(fn($m) => $m->url)->toArray();
         }
-        return collect($this->images ?? [])->map(fn($p) => asset('storage/' . $p))->toArray();
+        return collect($this->images ?? [])->map(fn($p) =>
+            (str_starts_with($p, 'http://') || str_starts_with($p, 'https://')) ? $p : asset('storage/' . $p)
+        )->toArray();
     }
 
     public function getThumbnailUrlAttribute(): ?string
     {
         if ($this->thumbnail_image) {
+            if (str_starts_with($this->thumbnail_image, 'http://') || str_starts_with($this->thumbnail_image, 'https://')) return $this->thumbnail_image;
             return asset('storage/' . $this->thumbnail_image);
         }
         if ($this->relationLoaded('readyMedia')) {
             $thumb = $this->readyMedia->firstWhere('is_thumbnail', true)
                 ?? $this->readyMedia->first();
-            return $thumb ? asset('storage/' . ($thumb->thumb_path ?? $thumb->processed_path)) : null;
+            return $thumb?->thumb_url;
         }
         return null;
     }

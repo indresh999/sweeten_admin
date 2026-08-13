@@ -1,6 +1,10 @@
 <div id="loading">
     @include('partials.dashboard._body_loader')
 </div>
+
+ {{-- Mobile Sidebar Overlay --}}
+ <div class="sidebar-overlay d-xl-none" id="sidebarOverlay"></div>
+
 @include('partials.dashboard._body_sidebar')
 <main class="main-content">
     <div class="position-relative iq-banner">
@@ -14,6 +18,7 @@
 
     @include('partials.dashboard._body_footer')
 </main>
+
 <a class="btn btn-fixed-end btn-warning btn-icon btn-setting" data-bs-toggle="offcanvas" data-bs-target="#offcanvasExample"
     role="button" aria-controls="offcanvasExample">
     <svg width="24" viewBox="0 0 24 24" class="animated-rotate" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -27,6 +32,7 @@
 @include('partials.components.setting-offcanvas')
 @include('partials.dashboard._scripts')
 @include('partials.dashboard._app_toast')
+
 <div class="modal fade" id="formModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -40,3 +46,53 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sidebar = document.getElementById('appSidebar');
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const closeSidebar = document.getElementById('closeSidebar');
+
+    function openSidebar() {
+        sidebar.classList.add('sidebar-open');
+        sidebarOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeSidebarFn() {
+        sidebar.classList.remove('sidebar-open');
+        sidebarOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', openSidebar);
+    }
+
+    if (sidebarOverlay) {
+        sidebarOverlay.addEventListener('click', closeSidebarFn);
+    }
+
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', closeSidebarFn);
+    }
+
+    // Close sidebar on escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeSidebarFn();
+    });
+
+    // Close sidebar on nav link click (mobile)
+    sidebar.querySelectorAll('.nav-link').forEach(function(link) {
+        link.addEventListener('click', function() {
+            if (window.innerWidth < 1200) {
+                // Don't close if it's a dropdown toggle
+                if (!this.hasAttribute('data-bs-toggle')) {
+                    setTimeout(closeSidebarFn, 150);
+                }
+            }
+        });
+    });
+});
+</script>

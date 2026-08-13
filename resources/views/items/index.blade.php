@@ -103,7 +103,7 @@
 @endphp
 
                                 @php
-                                    $firstImage = $item->images[0] ?? null;
+                                    $firstImage = $item->image_urls[0] ?? null;
                                 @endphp
 
                                 <tr>
@@ -111,7 +111,7 @@
 
                                     <td>
                                         @if ($firstImage)
-                                            <img src="{{ asset($firstImage) }}" class="img-thumbnail"
+                                            <img src="{{ $firstImage }}" class="img-thumbnail"
                                                 style="height:60px;width:60px;object-fit:cover;">
                                         @else
                                             <span class="text-muted small">No Image</span>

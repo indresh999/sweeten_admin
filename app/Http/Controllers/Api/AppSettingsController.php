@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\Policy;
 
 class AppSettingsController extends Controller
 {
@@ -26,6 +27,16 @@ class AppSettingsController extends Controller
         }
 
         return response()->json(['data' => $settings]);
+    }
+
+    public function paymentQr()
+    {
+        $path = AppSetting::get('payment_qr_path');
+        return response()->json([
+            'status'     => (bool) $path,
+            'qr_url'     => $path ? \Illuminate\Support\Facades\Storage::disk('public')->url($path) : null,
+            'updated_at' => AppSetting::get('payment_qr_updated_at'),
+        ]);
     }
 
     public function splashMedia(\Illuminate\Http\Request $request)
@@ -78,5 +89,15 @@ class AppSettingsController extends Controller
             'overlay_opacity' => (int) AppSetting::get('splash_overlay_opacity', 40),
             'title_color'     => AppSetting::get('splash_title_color', '#ffffff'),
         ]);
+    }
+
+    public function policies()
+    {
+        $policies = Policy::where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get(['id', 'title', 'slug', 'content', 'updated_at']);
+
+        return response()->json(['data' => $policies]);
     }
 }

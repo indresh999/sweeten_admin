@@ -49,7 +49,7 @@ class CartController extends Controller
     private function formatCartItem(CartItem $c): array
     {
         $item    = $c->item;
-        $variant = $item?->defaultVariant;
+        $variant = $c->variant ?? $item?->defaultVariant;
 
         $price  = (float) ($variant?->offer_price ?: ($variant?->price ?: ($c->offer_price ?: $c->price)));
         $gstPct = (float) ($variant?->gst_percent ?? 0);
@@ -58,7 +58,9 @@ class CartController extends Controller
         $imageUrls = [];
         if ($item?->images) {
             $imgs = is_array($item->images) ? $item->images : json_decode($item->images, true);
-            $imageUrls = collect($imgs ?? [])->map(fn($p) => asset('storage/' . $p))->toArray();
+            $imageUrls = collect($imgs ?? [])->map(fn($p) =>
+                (str_starts_with($p, 'http://') || str_starts_with($p, 'https://')) ? $p : asset('storage/' . $p)
+            )->toArray();
         }
 
         return [

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use App\Models\AppSetting;
 
 class AdminSettingsController extends Controller
@@ -93,6 +94,35 @@ class AdminSettingsController extends Controller
             }
         }
         return back()->with('success','App info updated.');
+    }
+
+    public function uploadPaymentQr(Request $request)
+    {
+        $request->validate([
+            'qr_image' => 'required|image|mimes:jpeg,png,jpg,webp|max:5120',
+        ]);
+
+        // Delete old QR if exists
+        $old = AppSetting::get('payment_qr_path');
+        if ($old) Storage::disk('public')->delete($old);
+
+        $path = $request->file('qr_image')->store('payment_qr', 'public');
+
+        AppSetting::set('payment_qr_path',       $path);
+        AppSetting::set('payment_qr_updated_at', now()->toDateTimeString());
+
+        return back()->with('success', 'Payment QR code updated successfully.')->withFragment('payment-qr');
+    }
+
+    public function removePaymentQr()
+    {
+        $path = AppSetting::get('payment_qr_path');
+        if ($path) Storage::disk('public')->delete($path);
+
+        AppSetting::set('payment_qr_path',       null);
+        AppSetting::set('payment_qr_updated_at', null);
+
+        return back()->with('success', 'Payment QR removed.')->withFragment('payment-qr');
     }
 
     private function writeEnv(array $data): void

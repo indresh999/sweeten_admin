@@ -41,12 +41,12 @@ class ProcessShopPhoto implements ShouldQueue
             $baseName = Str::beforeLast(basename($srcPath), '.');
             $dir      = 'shop_photos/' . $photo->shop_id;
 
-            // Full-size: max 1400px wide, 85% quality WebP
-            $fullPath = "{$dir}/{$baseName}_full.webp";
+            // Full-size: max 1400px wide, 85% quality JPEG
+            $fullPath = "{$dir}/{$baseName}_full.jpg";
             $this->resizeAndStore($disk->path($srcPath), $disk->path($fullPath), 1400, null, 85);
 
             // Thumbnail: 600×400 crop (good for shop cards)
-            $thumbPath = "{$dir}/{$baseName}_thumb.webp";
+            $thumbPath = "{$dir}/{$baseName}_thumb.jpg";
             $this->resizeAndStore($disk->path($srcPath), $disk->path($thumbPath), 600, 400, 80, true);
 
             $photo->update([
@@ -76,13 +76,17 @@ class ProcessShopPhoto implements ShouldQueue
             if ($crop && $height) {
                 $img->fit($width, $height);
             } else {
-                $img->resize($width, $height, fn($c) => $c->aspectRatio()->upsize());
+                // v2: aspectRatio() and upsize() return void — do NOT chain them
+                $img->resize($width, $height, function ($c) {
+                    $c->aspectRatio();
+                    $c->upsize();
+                });
             }
-            $img->encode('webp', $quality)->save($dest);
+            $img->encode('jpg', $quality)->save($dest);
             return;
         }
 
-        // GD fallback
+        // GD fallback — saves as JPEG regardless of extension
         $info = getimagesize($src);
         if (!$info) throw new \RuntimeException("Cannot read image: {$src}");
 

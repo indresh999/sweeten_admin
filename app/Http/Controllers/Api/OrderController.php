@@ -428,6 +428,7 @@ class OrderController extends Controller
         }
 
         $order = Order::where('id', $orderId)
+            ->where('user_id', $request->user()->id)
             ->whereNotIn('status', ['cancelled', 'delivered', 'out_for_delivery'])
             ->firstOrFail();
 
@@ -460,8 +461,12 @@ class OrderController extends Controller
     // ── Rate Order ─────────────────────────────────────────
     public function rateOrder(Request $request, int $orderId): JsonResponse
     {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['status' => false, 'message' => 'Unauthenticated.'], 401);
+        }
+
         $validator = Validator::make($request->all(), [
-            'user_id'         => 'required|exists:app_users,id',
             'shop_rating'     => 'required|integer|min:1|max:5',
             'delivery_rating' => 'nullable|integer|min:1|max:5',
             'comment'         => 'nullable|string|max:500',
@@ -471,7 +476,7 @@ class OrderController extends Controller
         }
 
         $order = Order::where('id', $orderId)
-            ->where('user_id', $request->user_id)
+            ->where('user_id', $user->id)
             ->where('status', 'delivered')
             ->firstOrFail();
 
@@ -488,7 +493,7 @@ class OrderController extends Controller
             ]);
 
             ShopReview::updateOrCreate(
-                ['order_id' => $orderId, 'user_id' => $request->user_id],
+                ['order_id' => $orderId, 'user_id' => $user->id],
                 ['shop_id' => $order->shop_id, 'rating' => $request->shop_rating, 'comment' => $request->comment]
             );
 
@@ -517,21 +522,21 @@ class OrderController extends Controller
     // ── Reorder ────────────────────────────────────────────
     public function reorder(Request $request, int $orderId): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:app_users,id',
-        ]);
-        if ($validator->fails()) {
-            return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['status' => false, 'message' => 'Unauthenticated.'], 401);
         }
 
-        $order = Order::with('items')->where('id', $orderId)->where('user_id', $request->user_id)->firstOrFail();
+        $order = Order::with('items')->where('id', $orderId)->where('user_id', $user->id)->firstOrFail();
 
-        CartItem::where('user_id', $request->user_id)->delete();
+        CartItem::where('user_id', $user->id)
+            ->where('owner_id', $order->shop_id)
+            ->delete();
 
         foreach ($order->items as $oi) {
             CartItem::updateOrCreate(
                 [
-                    'user_id'    => $request->user_id,
+                    'user_id'    => $user->id,
                     'owner_id'   => $order->shop_id,
                     'item_id'    => $oi->item_id,
                     'variant_id' => $oi->variant_id,

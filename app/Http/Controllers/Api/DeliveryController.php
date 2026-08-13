@@ -13,8 +13,12 @@ use App\Models\DeliveryBoy;
 use App\Models\DeliveryAssignment;
 use App\Models\DeliveryTimeline;
 use App\Models\DeliveryEarning;
+use App\Models\DeliveryRejectReason;
 use App\Models\AppSetting;
 use App\Services\NotificationService;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\DeliveryOrderAssignedMail;
+use App\Mail\DeliveryOrderDeliveredMail;
 
 class DeliveryController extends Controller
 {
@@ -27,7 +31,7 @@ class DeliveryController extends Controller
         return $r * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 
-    private function addTimeline(int $orderId, string $status, string $message = null): void
+    private function addTimeline(int $orderId, string $status, ?string $message = null): void
     {
         DeliveryTimeline::create([
             'order_id'   => $orderId,
@@ -37,8 +41,14 @@ class DeliveryController extends Controller
         ]);
     }
 
-    private function findNearestBoy(Order $order, int $excludeId = null): ?DeliveryBoy
+    /**
+     * Find nearest online, verified delivery boy with capacity.
+     * Excludes IDs in $excludeIds array.
+     */
+    private function findNearestBoy(Order $order, array $excludeIds = []): ?DeliveryBoy
     {
+        $maxRadius = (float) AppSetting::get('delivery_max_boy_radius_km', 15);
+
         return DeliveryBoy::selectRaw(
             '*, (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) AS distance',
             [$order->lat, $order->lng, $order->lat]
@@ -46,10 +56,92 @@ class DeliveryController extends Controller
         ->where('status', 'online')
         ->where('is_verified', 1)
         ->whereColumn('current_active_orders', '<', 'max_active_orders')
-        ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
-        ->having('distance', '<=', (float) AppSetting::get('delivery_max_boy_radius_km', 15))
+        ->when(!empty($excludeIds), fn($q) => $q->whereNotIn('id', $excludeIds))
+        ->having('distance', '<=', $maxRadius)
         ->orderBy('distance')
         ->first();
+    }
+
+    /**
+     * Find next available boy and assign (cascade on reject).
+     * Returns the new boy if assigned, null otherwise.
+     */
+    private function cascadeAssign(
+        Order $order,
+        DeliveryAssignment $currentAssignment,
+        int $excludeBoyId
+    ): ?DeliveryBoy {
+        // Collect all previously attempted boy IDs for this order
+        $attemptedIds = DeliveryAssignment::where('order_id', $order->id)
+            ->whereNotNull('delivery_boy_id')
+            ->pluck('delivery_boy_id')
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // Always exclude the current rejecting boy + all previously tried
+        $excludeIds = array_unique(array_merge($attemptedIds, [$excludeBoyId]));
+
+        $newBoy = $this->findNearestBoy($order, $excludeIds);
+
+        if ($newBoy) {
+            $currentAssignment->update([
+                'delivery_boy_id'   => $newBoy->id,
+                'status'            => 'assigned',
+                'assigned_at'       => now(),
+                'rejected_at'       => null,
+                'reject_reason_id'  => null,
+                'reject_remark'     => null,
+                'attempts'          => $currentAssignment->attempts + 1,
+            ]);
+            $newBoy->increment('current_active_orders');
+
+            $attemptNum = $currentAssignment->attempts;
+            $this->addTimeline(
+                $order->id,
+                'assigned',
+                "Reassigned to {$newBoy->full_name} (attempt #{$attemptNum})"
+            );
+
+            // Notify the new boy
+            NotificationService::send(
+                $newBoy->id,
+                'New Order Assignment! 🛵',
+                "You have a new delivery order (Order #{$order->id}). Tap to accept or reject.",
+                'delivery_order',
+                'order',
+                $order->id,
+                'delivery_boy'
+            );
+
+            // Email notification (best-effort)
+            try {
+                $shopName = $order->owner->restaurant_name ?? 'Shop';
+                Mail::to($newBoy->email)->send(new DeliveryOrderAssignedMail(
+                    $newBoy->full_name,
+                    $order->id,
+                    $shopName,
+                    $order->address_line ?? '',
+                    (float) $order->final_amount
+                ));
+            } catch (\Exception $e) {
+                Log::error('[Delivery] Reassignment email failed: ' . $e->getMessage());
+            }
+
+            return $newBoy;
+        }
+
+        return null;
+    }
+
+    // ── Get Reject Reasons ────────────────────────────────
+    public function getRejectReasons(): JsonResponse
+    {
+        $reasons = DeliveryRejectReason::active()
+            ->orderBy('sort_order')
+            ->get(['id', 'reason']);
+
+        return response()->json(['status' => true, 'data' => $reasons]);
     }
 
     // ── Auto Assign ────────────────────────────────────────
@@ -71,10 +163,52 @@ class DeliveryController extends Controller
 
         $assignment = DeliveryAssignment::updateOrCreate(
             ['order_id' => $order->id],
-            ['delivery_boy_id' => $boy->id, 'status' => 'assigned', 'expected_delivery' => now()->addMinutes(45)]
+            [
+                'delivery_boy_id'   => $boy->id,
+                'status'            => 'assigned',
+                'assigned_at'       => now(),
+                'attempts'          => 1,
+                'expected_delivery' => now()->addMinutes(45),
+            ]
         );
         $boy->increment('current_active_orders');
         $this->addTimeline($order->id, 'assigned', "Delivery partner {$boy->full_name} assigned");
+
+        // Notify via DB notification
+        NotificationService::send(
+            $boy->id,
+            'New Order Assignment! 🛵',
+            "You have a new delivery order (Order #{$order->id}). Tap to accept or reject.",
+            'delivery_order',
+            'order',
+            $order->id,
+            'delivery_boy'
+        );
+
+        // Email notification
+        try {
+            $shopName = $order->owner->restaurant_name ?? 'Shop';
+            Mail::to($boy->email)->send(new DeliveryOrderAssignedMail(
+                $boy->full_name,
+                $order->id,
+                $shopName,
+                $order->address_line ?? '',
+                (float) $order->final_amount
+            ));
+        } catch (\Exception $e) {
+            Log::error('[Delivery] Order assigned email failed: ' . $e->getMessage());
+        }
+
+        // Notify vendor
+        NotificationService::send(
+            $order->shop_id ?? 0,
+            'Delivery Partner Assigned',
+            "Delivery partner {$boy->full_name} has been assigned to Order #{$order->id}.",
+            'order',
+            'order',
+            $order->id,
+            'shop_owner'
+        );
 
         return response()->json([
             'status'     => true,
@@ -103,11 +237,24 @@ class DeliveryController extends Controller
             [
                 'delivery_boy_id'   => $boy->id,
                 'status'            => 'assigned',
+                'assigned_at'       => now(),
+                'attempts'          => 1,
                 'expected_delivery' => now()->addMinutes($request->expected_minutes ?? 45),
             ]
         );
         $boy->increment('current_active_orders');
         $this->addTimeline($order->id, 'assigned', "Manually assigned to {$boy->full_name}");
+
+        // Notify boy
+        NotificationService::send(
+            $boy->id,
+            'New Order Assignment! 🛵',
+            "You have a new delivery order (Order #{$order->id}). Tap to accept or reject.",
+            'delivery_order',
+            'order',
+            $order->id,
+            'delivery_boy'
+        );
 
         return response()->json([
             'status'     => true,
@@ -127,9 +274,18 @@ class DeliveryController extends Controller
         }
 
         $boyId = $request->user()->id;
+        $boy = DeliveryBoy::find($boyId);
+
+        if ($boy && $boy->has_pending_submission) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Cannot accept orders. You have a pending payment submission.',
+            ], 400);
+        }
 
         $assignment = DeliveryAssignment::where('order_id', $request->order_id)
             ->where('delivery_boy_id', $boyId)
+            ->where('status', 'assigned')
             ->firstOrFail();
 
         $assignment->update(['status' => 'accepted', 'accepted_at' => now()]);
@@ -145,32 +301,58 @@ class DeliveryController extends Controller
     public function reject(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'order_id' => 'required|exists:orders,id',
-            'reason'   => 'nullable|string|max:255',
+            'order_id'          => 'required|exists:orders,id',
+            'reject_reason_id'  => 'required|exists:delivery_reject_reasons,id',
+            'reject_remark'     => 'nullable|string|max:500',
         ]);
         if ($validator->fails()) {
             return response()->json(['status' => false, 'errors' => $validator->errors()], 422);
         }
 
-        $rejectedBoyId  = $request->user()->id;
-        $assignment     = DeliveryAssignment::where('order_id', $request->order_id)
-            ->where('delivery_boy_id', $rejectedBoyId)
-            ->firstOrFail();
-        $assignment->update(['status' => 'rejected', 'rejected_at' => now()]);
-        DeliveryBoy::where('id', $rejectedBoyId)->decrement('current_active_orders');
-        $this->addTimeline($request->order_id, 'reassigning', 'Finding another delivery partner');
+        $rejectedBoyId = $request->user()->id;
 
-        $order  = Order::findOrFail($request->order_id);
-        $newBoy = $this->findNearestBoy($order, $rejectedBoyId);
+        $assignment = DeliveryAssignment::where('order_id', $request->order_id)
+            ->where('delivery_boy_id', $rejectedBoyId)
+            ->where('status', 'assigned')
+            ->firstOrFail();
+
+        $order = Order::findOrFail($request->order_id);
+
+        // Record rejection
+        $assignment->update([
+            'status'            => 'rejected',
+            'rejected_at'       => now(),
+            'reject_reason_id'  => $request->reject_reason_id,
+            'reject_remark'     => $request->reject_remark,
+        ]);
+        DeliveryBoy::where('id', $rejectedBoyId)->decrement('current_active_orders');
+
+        $this->addTimeline(
+            $order->id,
+            'reassigning',
+            "Delivery partner rejected. Finding another partner..."
+        );
+
+        // Try to cascade to next available boy
+        $newBoy = $this->cascadeAssign($order, $assignment, $rejectedBoyId);
 
         if ($newBoy) {
-            $assignment->update(['delivery_boy_id' => $newBoy->id, 'status' => 'assigned', 'rejected_at' => null]);
-            $newBoy->increment('current_active_orders');
-            $this->addTimeline($request->order_id, 'assigned', "Reassigned to {$newBoy->full_name}");
-            return response()->json(['status' => true, 'message' => 'Rejected and reassigned.', 'reassigned_to' => $newBoy->full_name]);
+            return response()->json([
+                'status'       => true,
+                'message'      => 'Rejected and reassigned to ' . $newBoy->full_name . '.',
+                'reassigned'   => true,
+                'reassigned_to' => $newBoy->full_name,
+            ]);
         }
 
-        return response()->json(['status' => true, 'message' => 'Rejected. No reassignment available at this time.']);
+        // No more boys available — mark as pending reassignment
+        $this->addTimeline($order->id, 'waiting', 'No delivery partners available. Waiting for new partners to come online.');
+
+        return response()->json([
+            'status'     => true,
+            'message'    => 'Rejected. No delivery partners available right now. Order will be reassigned when a partner becomes available.',
+            'reassigned' => false,
+        ]);
     }
 
     // ── Picked Up ──────────────────────────────────────────
@@ -221,6 +403,11 @@ class DeliveryController extends Controller
             $order->update(['status' => 'delivered']);
             DeliveryBoy::where('id', $boyId)->decrement('current_active_orders');
 
+            if ($order->payment_method === 'cod') {
+                $order->update(['payment_status' => 'paid']);
+                DeliveryBoy::where('id', $boyId)->increment('wallet_collected', (float) $order->final_amount);
+            }
+
             $baseEarning = (float) AppSetting::get('delivery_earn_per_order', 30);
             DeliveryEarning::create([
                 'delivery_boy_id' => $boyId,
@@ -232,6 +419,17 @@ class DeliveryController extends Controller
 
             $this->addTimeline($request->order_id, 'delivered', $request->notes ?? 'Order delivered successfully');
             NotificationService::orderDelivered($order->user_id, $order->id);
+
+            try {
+                $boy = DeliveryBoy::find($boyId);
+                Mail::to($boy->email)->send(new DeliveryOrderDeliveredMail(
+                    $boy->full_name,
+                    $order->id,
+                    $baseEarning
+                ));
+            } catch (\Exception $e) {
+                Log::error('[Delivery] Order delivered email failed: ' . $e->getMessage());
+            }
 
             DB::commit();
             Log::info('[Delivery] Order #' . $request->order_id . ' delivered by boy #' . $boyId);
@@ -297,6 +495,16 @@ class DeliveryController extends Controller
     public function pendingAssignment(Request $request): JsonResponse
     {
         $boyId = $request->user()->id;
+        $boy = DeliveryBoy::find($boyId);
+
+        if ($boy && $boy->has_pending_submission) {
+            return response()->json([
+                'status'       => true,
+                'data'         => null,
+                'blocked'      => true,
+                'block_reason' => 'You have a pending payment submission. Please wait for admin approval before accepting new orders.',
+            ]);
+        }
 
         $assignment = DeliveryAssignment::with([
             'order:id,status,final_amount,address_line,city,lat,lng',
@@ -347,9 +555,7 @@ class DeliveryController extends Controller
         };
 
         $earnings = $query->orderByDesc('created_at')->get();
-
-        // All-time totals for stats cards
-        $allTime = DeliveryEarning::where('delivery_boy_id', $boyId);
+        $allTime  = DeliveryEarning::where('delivery_boy_id', $boyId);
 
         return response()->json([
             'status' => true,

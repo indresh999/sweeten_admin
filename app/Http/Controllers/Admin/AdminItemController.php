@@ -16,7 +16,7 @@ class AdminItemController extends Controller
 {
     public function index(Request $request)
     {
-        $items = Item::with(['category:id,category_name','owner:shop_id,restaurant_name','variants'])
+        $items = Item::with(['category:id,category_name','subcategory:id,name','owner:shop_id,restaurant_name','variants'])
             ->when($request->search, fn($q) => $q->where('item_name','like','%'.$request->search.'%'))
             ->when($request->shop_id, fn($q) => $q->where('shop_id',$request->shop_id))
             ->when($request->category_id, fn($q) => $q->where('category_id',$request->category_id))
@@ -38,63 +38,90 @@ class AdminItemController extends Controller
 
     public function show(int $id)
     {
-        $item = Item::with(['category','subcategory','variants','owner:shop_id,restaurant_name'])->findOrFail($id);
+        $item = Item::with(['category','subcategory','variants','readyMedia','owner:shop_id,restaurant_name'])->findOrFail($id);
         return view('admin.items.show', compact('item'));
     }
 
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'shop_id'       => 'required|exists:app_owner_shops,shop_id',
             'category_id'   => 'required|exists:item_categories,id',
+            'subcategory_id'=> 'nullable|exists:item_subcategories,id',
             'item_name'     => 'required|string|max:150',
+            'description'   => 'nullable|string|max:2000',
+            'is_veg'        => 'nullable',
+            'is_featured'   => 'nullable',
+            'status'        => 'nullable|in:active,inactive',
             'variants'      => 'required|array|min:1',
             'variants.*.label'      => 'required|string|max:100',
-            'variants.*.price'      => 'required|numeric|min:0',
+            'variants.*.price'      => 'required|numeric|min:0.01',
+            'variants.*.offer_price'=> 'nullable|numeric|min:0',
             'variants.*.gst_percent'=> 'required|numeric|min:0|max:100',
-            'images.*'      => 'nullable|image|mimes:jpeg,png,webp|max:3072',
+            'variants.*.hsn_code'   => 'nullable|string|max:20',
+            'images.*'      => 'nullable|image|mimes:jpeg,png,jpg,webp|max:3072',
         ]);
 
         DB::beginTransaction();
         try {
             $images = [];
             if ($request->hasFile('images')) {
-                foreach ($request->file('images') as $img) $images[] = $img->store('items','public');
+                foreach ($request->file('images') as $img) {
+                    if ($img->isValid()) {
+                        $images[] = $img->store('items','public');
+                    }
+                }
             }
+
+            $firstVariant = $request->variants[0];
             $item = Item::create([
-                'shop_id'        => $request->shop_id,
-                'category_id'    => $request->category_id,
-                'subcategory_id' => $request->subcategory_id,
-                'item_name'      => $request->item_name,
-                'description'    => $request->description,
+                'shop_id'        => $validated['shop_id'],
+                'category_id'    => $validated['category_id'],
+                'subcategory_id' => $validated['subcategory_id'] ?? null,
+                'item_name'      => $validated['item_name'],
+                'description'    => $validated['description'] ?? null,
+                'price'          => $firstVariant['price'],
+                'offer_price'    => $firstVariant['offer_price'] ?? null,
+                'gst_percent'    => $firstVariant['gst_percent'],
                 'is_veg'         => $request->boolean('is_veg', true),
                 'is_featured'    => $request->boolean('is_featured'),
-                'status'         => $request->get('status','active'),
+                'status'         => $validated['status'] ?? 'active',
                 'images'         => $images,
             ]);
+
             foreach ($request->variants as $i => $v) {
+                $price = (float) $v['price'];
+                $offerPrice = !empty($v['offer_price']) ? (float) $v['offer_price'] : null;
+                $gst = (float) $v['gst_percent'];
+                $netPrice = $offerPrice ?? $price;
+                $cgst = round($netPrice * $gst / 200, 2);
+                $sgst = round($netPrice * $gst / 200, 2);
+
                 ItemVariant::create([
-                    'item_id'    => $item->id,
-                    'label'      => $v['label'],
-                    'price'      => $v['price'],
-                    'offer_price'=> $v['offer_price'] ?? null,
-                    'gst_percent'=> $v['gst_percent'],
-                    'hsn_code'   => $v['hsn_code'] ?? null,
-                    'is_default' => $i === 0,
-                    'status'     => 'active',
+                    'item_id'     => $item->id,
+                    'label'       => $v['label'],
+                    'price'       => $price,
+                    'offer_price' => $offerPrice,
+                    'gst_percent' => $gst,
+                    'cgst'        => $cgst,
+                    'sgst'        => $sgst,
+                    'hsn_code'    => $v['hsn_code'] ?? null,
+                    'is_default'  => $i === 0,
+                    'status'      => 'active',
                 ]);
             }
+
             DB::commit();
-            return redirect()->route('admin.items.index')->with('success','Item created.');
+            return redirect()->route('admin.items.index')->with('success','Item "' . $item->item_name . '" created successfully with ' . count($request->variants) . ' variant(s).');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withErrors($e->getMessage());
+            return back()->withInput()->withErrors(['error' => 'Failed to create item: ' . $e->getMessage()]);
         }
     }
 
     public function edit(int $id)
     {
-        $item       = Item::with('variants')->findOrFail($id);
+        $item       = Item::with(['variants', 'readyMedia'])->findOrFail($id);
         $vendors    = AppOwnerUser::select('shop_id','restaurant_name')->get();
         $categories = ItemCategory::select('id','category_name')->get();
         $subcats    = ItemSubcategory::where('category_id',$item->category_id)->get();
@@ -104,42 +131,86 @@ class AdminItemController extends Controller
     public function update(Request $request, int $id)
     {
         $item = Item::with('variants')->findOrFail($id);
+
+        $validated = $request->validate([
+            'shop_id'       => 'required|exists:app_owner_shops,shop_id',
+            'category_id'   => 'required|exists:item_categories,id',
+            'subcategory_id'=> 'nullable|exists:item_subcategories,id',
+            'item_name'     => 'required|string|max:150',
+            'description'   => 'nullable|string|max:2000',
+            'is_veg'        => 'nullable',
+            'is_featured'   => 'nullable',
+            'status'        => 'nullable|in:active,inactive',
+            'variants'      => 'required|array|min:1',
+            'variants.*.id'         => 'nullable|integer',
+            'variants.*.label'      => 'required|string|max:100',
+            'variants.*.price'      => 'required|numeric|min:0.01',
+            'variants.*.offer_price'=> 'nullable|numeric|min:0',
+            'variants.*.gst_percent'=> 'required|numeric|min:0|max:100',
+            'variants.*.hsn_code'   => 'nullable|string|max:20',
+            'images.*'      => 'nullable|image|mimes:jpeg,png,jpg,webp|max:3072',
+        ]);
+
         DB::beginTransaction();
         try {
             $images = $item->images ?? [];
             if ($request->hasFile('images')) {
                 foreach ($images as $img) Storage::disk('public')->delete($img);
                 $images = [];
-                foreach ($request->file('images') as $img) $images[] = $img->store('items','public');
-            }
-            $item->update([
-                'shop_id'       => $request->shop_id ?? $item->shop_id,
-                'category_id'   => $request->category_id ?? $item->category_id,
-                'subcategory_id'=> $request->subcategory_id,
-                'item_name'     => $request->item_name,
-                'description'   => $request->description,
-                'is_veg'        => $request->boolean('is_veg', $item->is_veg),
-                'is_featured'   => $request->boolean('is_featured', $item->is_featured),
-                'status'        => $request->get('status', $item->status),
-                'images'        => $images,
-            ]);
-            if ($request->filled('variants')) {
-                $existIds    = $item->variants->pluck('id')->toArray();
-                $incomingIds = collect($request->variants)->pluck('id')->filter()->toArray();
-                ItemVariant::whereIn('id', array_diff($existIds,$incomingIds))->update(['status'=>'inactive']);
-                foreach ($request->variants as $i => $v) {
-                    ItemVariant::updateOrCreate(['id'=>$v['id']??null],[
-                        'item_id'    => $item->id, 'label'=>$v['label'], 'price'=>$v['price'],
-                        'offer_price'=>$v['offer_price']??null, 'gst_percent'=>$v['gst_percent'],
-                        'hsn_code'   =>$v['hsn_code']??null, 'is_default'=>$i===0, 'status'=>'active',
-                    ]);
+                foreach ($request->file('images') as $img) {
+                    if ($img->isValid()) {
+                        $images[] = $img->store('items','public');
+                    }
                 }
             }
+
+            $firstVariant = $request->variants[0];
+            $item->update([
+                'shop_id'        => $validated['shop_id'],
+                'category_id'    => $validated['category_id'],
+                'subcategory_id' => $validated['subcategory_id'] ?? null,
+                'item_name'      => $validated['item_name'],
+                'description'    => $validated['description'] ?? null,
+                'price'          => $firstVariant['price'],
+                'offer_price'    => $firstVariant['offer_price'] ?? null,
+                'gst_percent'    => $firstVariant['gst_percent'],
+                'is_veg'         => $request->boolean('is_veg', $item->is_veg),
+                'is_featured'    => $request->boolean('is_featured', $item->is_featured),
+                'status'         => $validated['status'] ?? $item->status,
+                'images'         => $images,
+            ]);
+
+            $existIds    = $item->variants->pluck('id')->toArray();
+            $incomingIds = collect($request->variants)->pluck('id')->filter()->toArray();
+            ItemVariant::whereIn('id', array_diff($existIds, $incomingIds))->update(['status' => 'inactive']);
+
+            foreach ($request->variants as $i => $v) {
+                $price = (float) $v['price'];
+                $offerPrice = !empty($v['offer_price']) ? (float) $v['offer_price'] : null;
+                $gst = (float) $v['gst_percent'];
+                $netPrice = $offerPrice ?? $price;
+                $cgst = round($netPrice * $gst / 200, 2);
+                $sgst = round($netPrice * $gst / 200, 2);
+
+                ItemVariant::updateOrCreate(['id' => $v['id'] ?? null], [
+                    'item_id'     => $item->id,
+                    'label'       => $v['label'],
+                    'price'       => $price,
+                    'offer_price' => $offerPrice,
+                    'gst_percent' => $gst,
+                    'cgst'        => $cgst,
+                    'sgst'        => $sgst,
+                    'hsn_code'    => $v['hsn_code'] ?? null,
+                    'is_default'  => $i === 0,
+                    'status'      => 'active',
+                ]);
+            }
+
             DB::commit();
-            return redirect()->route('admin.items.index')->with('success','Item updated.');
+            return redirect()->route('admin.items.index')->with('success', 'Item "' . $item->item_name . '" updated successfully.');
         } catch (\Exception $e) {
             DB::rollBack();
-            return back()->withErrors($e->getMessage());
+            return back()->withInput()->withErrors(['error' => 'Failed to update item: ' . $e->getMessage()]);
         }
     }
 
@@ -161,6 +232,6 @@ class AdminItemController extends Controller
 
     public function subcategories(int $categoryId)
     {
-        return response()->json(ItemSubcategory::where('category_id',$categoryId)->where('status','active')->select('id','name')->get());
+        return response()->json(ItemSubcategory::where('category_id',$categoryId)->where('status',1)->select('id','name')->get());
     }
 }

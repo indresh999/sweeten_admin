@@ -29,14 +29,6 @@ class AuthOnboardingMiddleware
             return response()->json(['status' => false, 'message' => 'Your store has been suspended. Please contact support.'], 403);
         }
 
-        if ($shop->status === 'rejected') {
-            return response()->json([
-                'status'  => false,
-                'message' => 'Your application was not approved. Please contact support for details.',
-                'code'    => 'application_rejected',
-            ], 403);
-        }
-
         $request->setUserResolver(fn () => $shop);
 
         return $next($request);

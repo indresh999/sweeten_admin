@@ -20,7 +20,8 @@ class AppOwnerUser extends Model
         'is_featured', 'featured_sort_order',
         'is_popular', 'popular_sort_order', 'popular_area',
         'fssai_number', 'bank_account_name', 'bank_account_number',
-        'bank_ifsc', 'bank_name', 'last_active_at',
+        'bank_ifsc', 'bank_name', 'payment_type', 'upi_id',
+        'last_active_at',
         'otp_code', 'otp_expires_at', 'onboarding_step',
     ];
 
@@ -41,6 +42,11 @@ class AppOwnerUser extends Model
     public function images()
     {
         return $this->hasMany(ShopImage::class, 'shop_id', 'shop_id');
+    }
+
+    public function documents()
+    {
+        return $this->hasMany(\App\Models\ShopDocument::class, 'shop_id', 'shop_id');
     }
 
     public function items()

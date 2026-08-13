@@ -3,6 +3,7 @@
 <!-- Favicon -->
 <link rel="shortcut icon" href="{{asset('images/favicon.ico')}}" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 <link rel="stylesheet" href="{{asset('css/libs.min.css')}}">
 <link rel="stylesheet" href="{{asset('css/hope-ui.css?v=1.1.0')}}">
 <link rel="stylesheet" href="{{asset('css/custom.css?v=1.1.0')}}">

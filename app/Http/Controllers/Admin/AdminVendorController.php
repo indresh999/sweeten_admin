@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\AppOwnerUser;
 use App\Models\Order;
 use App\Models\DeliveryEarning;
+use App\Mail\VendorApprovedMail;
+use App\Mail\VendorRejectedMail;
 
 class AdminVendorController extends Controller
 {
@@ -66,11 +68,12 @@ class AdminVendorController extends Controller
     {
         $vendor = AppOwnerUser::findOrFail($id);
         $vendor->update(['status' => 'active']);
-        try {
-            Mail::raw("Congratulations! Your store '{$vendor->restaurant_name}' has been approved on Sweetan. You can now start receiving orders.", function($m) use ($vendor) {
-                $m->to($vendor->email)->subject('Your Sweetan Store is Approved! 🎉');
-            });
-        } catch (\Exception $e) {}
+        if ($vendor->email) {
+            Mail::to($vendor->email)->send(new VendorApprovedMail(
+                $vendor->full_name,
+                $vendor->restaurant_name
+            ));
+        }
         return back()->with('success','Vendor approved and notified.');
     }
 
@@ -79,11 +82,13 @@ class AdminVendorController extends Controller
         $vendor = AppOwnerUser::findOrFail($id);
         $reason = $request->get('reason', 'Your application did not meet our requirements.');
         $vendor->update(['status' => 'rejected']);
-        try {
-            Mail::raw("Dear {$vendor->full_name}, unfortunately your store application has been rejected. Reason: {$reason}. Please contact support for assistance.", function($m) use ($vendor) {
-                $m->to($vendor->email)->subject('Sweetan Store Application Status');
-            });
-        } catch (\Exception $e) {}
+        if ($vendor->email) {
+            Mail::to($vendor->email)->send(new VendorRejectedMail(
+                $vendor->full_name,
+                $vendor->restaurant_name,
+                $reason
+            ));
+        }
         return back()->with('success','Vendor rejected.');
     }
 

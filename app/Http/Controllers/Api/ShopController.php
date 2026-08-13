@@ -19,6 +19,7 @@ use App\Models\Order;
 use App\Models\AppSetting;
 use App\Models\ShopReview;
 use App\Models\ShopView;
+use App\Services\NotificationService;
 use Intervention\Image\Facades\Image;
 
 class ShopController extends Controller
@@ -190,9 +191,6 @@ class ShopController extends Controller
             'blocked'  => throw new \Symfony\Component\HttpKernel\Exception\HttpException(
                 403, 'Your store has been suspended. Please contact support.'
             ),
-            'pending'  => throw new \Symfony\Component\HttpKernel\Exception\HttpException(
-                403, 'Your store is under review. You will be notified once activated.'
-            ),
             'inactive' => throw new \Symfony\Component\HttpKernel\Exception\HttpException(
                 403, 'Your store is currently inactive. Enable it from your dashboard.'
             ),
@@ -311,6 +309,14 @@ class ShopController extends Controller
             return response()->json(['status' => false, 'message' => 'Blocked stores cannot be toggled. Contact admin.'], 403);
         }
 
+        if ($shop->status === 'pending') {
+            return response()->json(['status' => false, 'message' => 'Your store is under review. You can go online once approved.'], 403);
+        }
+
+        if (!in_array($shop->status, ['active', 'inactive'])) {
+            return response()->json(['status' => false, 'message' => 'Cannot toggle status.'], 403);
+        }
+
         $shop->status = $shop->status === 'active' ? 'inactive' : 'active';
         $shop->save();
 
@@ -363,6 +369,7 @@ class ShopController extends Controller
             'items',
             'user:id,full_name,phone_number',
             'assignment.boy:id,full_name,phone_number',
+            'orderTimeline:id,order_id,status,message,created_at',
         ])
             ->where('shop_id', $sid)
             ->orderByDesc('created_at');
@@ -435,6 +442,16 @@ class ShopController extends Controller
             ]);
 
             DB::commit();
+
+            // Notify customer
+            match($request->status) {
+                'confirmed'       => NotificationService::orderConfirmed($order->user_id, $order->id),
+                'preparing'       => NotificationService::send($order->user_id, 'Order Being Prepared 👨‍🍳', "Your order #{$order->id} is now being prepared.", 'order', 'order', $order->id),
+                'out_for_delivery'=> NotificationService::send($order->user_id, 'Ready for Pickup! 📦', "Your order #{$order->id} is ready for delivery partner pickup.", 'order', 'order', $order->id),
+                'cancelled'       => NotificationService::orderCancelled($order->user_id, $order->id),
+                default           => null,
+            };
+
             return response()->json([
                 'status'  => true,
                 'message' => 'Order status updated.',
@@ -459,7 +476,7 @@ class ShopController extends Controller
             'preparing'   => Order::where('shop_id', $sid)->where('status', 'preparing')->count(),
             'active'      => Order::where('shop_id', $sid)->whereIn('status', ['pending','confirmed','preparing','out_for_delivery'])->count(),
             'today'       => Order::where('shop_id', $sid)->whereDate('created_at', $today)->count(),
-            'today_revenue' => (float) Order::where('shop_id', $sid)->whereDate('created_at', $today)->where('status', 'delivered')->sum('total'),
+            'today_revenue' => (float) Order::where('shop_id', $sid)->whereDate('created_at', $today)->where('status', 'delivered')->sum('final_amount'),
         ];
 
         return response()->json(['status' => true, 'data' => $stats]);
@@ -490,13 +507,22 @@ class ShopController extends Controller
             ->where('status', 'active')
             ->having('distance', '<=', $radius)
             ->orderBy('distance')
+            ->withAvg('reviews as avg_rating', function ($q) {
+                $q->where('is_approved', 1);
+            })
+            ->withCount('reviews as review_count', function ($q) {
+                $q->where('is_approved', 1);
+            })
             ->with('images:id,shop_id,image_path,tag')
             ->limit(60)
             ->get()
             ->map(function ($shop) {
                 $shop->is_open   = $shop->isOpenNow();
-                $shop->logo_url  = $shop->images->where('tag', 'logo')->first()?->image_path;
-                $shop->cover_url = $shop->images->where('tag', '!=', 'logo')->first()?->image_path;
+                $logo            = $shop->images->where('tag', 'logo')->first();
+                $cover           = $shop->images->where('tag', '!=', 'logo')->first();
+                $shop->logo_url  = $logo?->url;
+                $shop->cover_url = $cover?->url;
+                $shop->image_url = $cover?->url ?? $logo?->url;
                 return $shop->makeHidden(['password', 'api_token']);
             });
 
@@ -626,7 +652,7 @@ class ShopController extends Controller
         return response()->json(['status' => true, 'data' => $schedules]);
     }
 
-    // ── Shop Menu (details + gallery + menu by subcategory) ───────────────────
+    // ── Shop Menu (details + gallery + menu by category→subcategory→items) ───
     public function shopMenu(int $id): JsonResponse
     {
         $shop = AppOwnerUser::with([
@@ -641,33 +667,55 @@ class ShopController extends Controller
 
         $images = $shop->images->map(fn($img) => asset('storage/' . $img->image_path))->values();
 
-        $items = Item::with(['subcategory:id,name,sort_order'])
+        $items = Item::with([
+                'category:id,category_name,image,sort_order',
+                'subcategory:id,name,image,sort_order,category_id',
+            ])
             ->where('shop_id', $id)
             ->where('status', 1)
             ->orderBy('display_order')
             ->orderBy('item_name')
             ->get();
 
+        $mapItem = fn($item) => [
+            'id'          => $item->id,
+            'name'        => $item->item_name,
+            'description' => $item->description,
+            'price'       => (float) $item->price,
+            'offer_price' => $item->offer_price ? (float) $item->offer_price : null,
+            'is_veg'      => (bool) $item->is_veg,
+            'is_featured' => (bool) $item->is_featured,
+            'badge'       => $item->badge,
+            'image_url'   => $item->thumbnail_url,
+            'spice_level' => $item->spice_level,
+            'view_type'   => $item->is_veg ? 'list' : 'list',
+        ];
+
         $menu = $items
-            ->groupBy('subcategory_id')
-            ->map(function ($groupItems, $subId) {
-                $sub = $groupItems->first()->subcategory;
+            ->groupBy('category_id')
+            ->map(function ($catItems, $catId) use ($mapItem) {
+                $cat = $catItems->first()->category;
+                $subcats = $catItems->groupBy('subcategory_id')
+                    ->map(function ($subItems, $subId) use ($mapItem) {
+                        $sub = $subItems->first()->subcategory;
+                        return [
+                            'id'         => (int) ($subId ?? 0),
+                            'name'       => $sub?->name ?? 'Other',
+                            'image'      => $sub?->image ? asset($sub->image) : null,
+                            'sort'       => (int) ($sub?->sort_order ?? 99),
+                            'item_count' => $subItems->count(),
+                            'items'      => $subItems->map($mapItem)->values(),
+                        ];
+                    })
+                    ->sortBy('sort')
+                    ->values();
+
                 return [
-                    'id'    => (int) ($subId ?? 0),
-                    'name'  => $sub?->name ?? 'Other',
-                    'sort'  => (int) ($sub?->sort_order ?? 99),
-                    'items' => $groupItems->map(fn($item) => [
-                        'id'          => $item->id,
-                        'name'        => $item->item_name,
-                        'description' => $item->description,
-                        'price'       => (float) $item->price,
-                        'offer_price' => $item->offer_price ? (float) $item->offer_price : null,
-                        'is_veg'      => (bool) $item->is_veg,
-                        'is_featured' => (bool) $item->is_featured,
-                        'badge'       => $item->badge,
-                        'image_url'   => $item->thumbnail_url,
-                        'spice_level' => $item->spice_level,
-                    ])->values(),
+                    'id'            => (int) ($catId ?? 0),
+                    'name'          => $cat?->category_name ?? 'Other',
+                    'image'         => $cat?->image ? asset($cat->image) : null,
+                    'sort'          => (int) ($cat?->sort_order ?? 99),
+                    'subcategories' => $subcats,
                 ];
             })
             ->sortBy('sort')

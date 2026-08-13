@@ -7,6 +7,7 @@ use App\Jobs\ProcessItemMedia;
 use App\Models\Item;
 use App\Models\ItemMedia;
 use App\Models\ItemVariant;
+use App\Models\ProductUnit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -355,6 +356,16 @@ class VendorItemController extends Controller
     }
 
     // ── Category Tree (for filter dropdown) ──────────────────────────────────
+    // GET /shop/products/units
+    public function units(): JsonResponse
+    {
+        $units = ProductUnit::where('is_active', true)
+            ->orderBy('sort_order')
+            ->get(['id', 'name', 'short_name', 'category']);
+
+        return response()->json(['status' => true, 'data' => $units]);
+    }
+
     // GET /shop/products/categories
     public function categoryTree(Request $request): JsonResponse
     {
@@ -363,9 +374,9 @@ class VendorItemController extends Controller
         $cats = DB::table('item_categories as c')
             ->leftJoin('items as i', fn($j) => $j->on('i.category_id', '=', 'c.id')->where('i.shop_id', $shopId)->whereNull('i.deleted_at'))
             ->where('c.status', 1)
-            ->groupBy('c.id', 'c.category_name', 'c.sort_order')
+            ->groupBy('c.id', 'c.category_name', 'c.sort_order', 'c.hsn_code', 'c.gst_percent')
             ->orderBy('c.sort_order')
-            ->select('c.id', 'c.category_name', DB::raw('COUNT(i.id) as item_count'))
+            ->select('c.id', 'c.category_name', 'c.hsn_code', 'c.gst_percent', DB::raw('COUNT(i.id) as item_count'))
             ->get();
 
         return response()->json(['status' => true, 'data' => $cats]);
@@ -397,7 +408,7 @@ class VendorItemController extends Controller
             'description'        => 'nullable|string|max:2000',
             'item_type'          => 'nullable|in:regular,combo',
             'price'              => 'nullable|numeric|min:0',
-            'offer_price'        => 'nullable|numeric|min:0|lt:price',
+            'offer_price'        => 'nullable|numeric|min:0',
             'min_quantity'       => 'nullable|integer|min:1',
             'max_quantity'       => 'nullable|integer|min:1|gte:min_quantity',
             'weight_or_piece'    => 'nullable|string|max:50',
@@ -410,6 +421,7 @@ class VendorItemController extends Controller
             'display_order'      => 'nullable|integer|min:0',
             'badge'              => 'nullable|string|max:50',
             'subcategory_id'     => 'nullable|exists:item_subcategories,id',
+            'unit_id'            => 'nullable|exists:product_units,id',
             'gst_percent'        => 'nullable|numeric|min:0|max:28',
             'hsn_code'           => 'nullable|string|max:20',
             'sku'                => 'nullable|string|max:100',
@@ -429,12 +441,12 @@ class VendorItemController extends Controller
             if ($request->has($f)) $data[$f] = $request->input($f);
         }
 
-        $numericFields = ['price', 'offer_price', 'min_quantity', 'max_quantity', 'preparation_time', 'display_order', 'gst_percent', 'stock_quantity', 'low_stock_alert', 'category_id', 'subcategory_id'];
+        $numericFields = ['price', 'offer_price', 'min_quantity', 'max_quantity', 'preparation_time', 'display_order', 'gst_percent', 'stock_quantity', 'low_stock_alert', 'category_id', 'subcategory_id', 'unit_id'];
         foreach ($numericFields as $f) {
             if ($request->has($f)) $data[$f] = $request->input($f);
         }
 
-        $boolFields = ['is_veg', 'is_jain', 'is_featured', 'allow_custom_notes', 'track_inventory'];
+        $boolFields = ['is_veg', 'is_jain', 'contains_egg', 'is_featured', 'allow_custom_notes', 'track_inventory'];
         foreach ($boolFields as $f) {
             if ($request->has($f)) $data[$f] = $request->boolean($f);
         }
@@ -522,9 +534,9 @@ class VendorItemController extends Controller
                 'processing_status'  => 'pending',
             ]);
 
-            ProcessItemMedia::dispatch($media->id);
+            ProcessItemMedia::dispatchSync($media->id);
 
-            $created[] = $this->formatMedia($media);
+            $created[] = $this->formatMedia($media->fresh());
         }
 
         return $created;
@@ -556,14 +568,23 @@ class VendorItemController extends Controller
     private function appendMedia(Item $item): Item
     {
         if ($item->relationLoaded('readyMedia')) {
-            $item->media_urls    = $item->readyMedia->map(fn($m) => $this->formatMedia($m))->toArray();
-            $item->thumbnail_url = $item->readyMedia->firstWhere('is_thumbnail', true)?->thumb_url
-                ?? $item->readyMedia->first()?->url;
+            $mediaCollection = $item->readyMedia;
+            $item->media_urls    = $mediaCollection->map(fn($m) => $this->formatMedia($m))->toArray();
+            $item->thumbnail_url = $mediaCollection->firstWhere('is_thumbnail', true)?->thumb_url
+                ?? $mediaCollection->first()?->url;
+        } elseif ($item->relationLoaded('media')) {
+            // 'media' relation (all media) — filter to done items only
+            $mediaCollection = $item->media->where('processing_status', 'done')->values();
+            $item->media_urls    = $mediaCollection->map(fn($m) => $this->formatMedia($m))->toArray();
+            $item->thumbnail_url = $mediaCollection->firstWhere('is_thumbnail', true)?->thumb_url
+                ?? $mediaCollection->first()?->url;
         }
 
         // Legacy JSON images fallback
         if (empty($item->media_urls)) {
-            $item->image_urls = collect($item->images ?? [])->map(fn($p) => asset('storage/' . $p))->toArray();
+            $item->image_urls = collect($item->images ?? [])->map(fn($p) =>
+                (str_starts_with($p, 'http://') || str_starts_with($p, 'https://')) ? $p : asset('storage/' . $p)
+            )->toArray();
         }
 
         return $item;

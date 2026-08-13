@@ -25,14 +25,21 @@ class ShopImage extends Model
 
     public function getUrlAttribute(): ?string
     {
-        return $this->image_path ? asset('storage/' . $this->image_path) : null;
+        return $this->image_path ? asset('storage/' . $this->_strip($this->image_path)) : null;
     }
 
     public function getThumbUrlAttribute(): ?string
     {
         return $this->thumb_path
-            ? asset('storage/' . $this->thumb_path)
+            ? asset('storage/' . $this->_strip($this->thumb_path))
             : $this->url;
+    }
+
+    // Strip any erroneous "storage/" prefix saved by the old admin upload flow.
+    private function _strip(string $path): string
+    {
+        $path = ltrim($path, '/');
+        return str_starts_with($path, 'storage/') ? substr($path, 8) : $path;
     }
 
     public function isReady(): bool

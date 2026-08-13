@@ -1,5 +1,18 @@
 
 <x-app-layout :assets="$assets ?? []">
+@push('styles')
+<style>
+.shop-lightbox { display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:9999; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; }
+.shop-lightbox.show { display:flex; }
+.shop-lightbox .lb-content { position:relative; max-width:90vw; max-height:85vh; display:flex; align-items:center; justify-content:center; }
+.shop-lightbox img { max-width:90vw; max-height:85vh; border-radius:10px; box-shadow:0 8px 40px rgba(0,0,0,0.5); object-fit:contain; }
+.shop-lightbox .lb-close { position:fixed; top:18px; right:24px; z-index:10000; background:rgba(255,255,255,0.15); border:none; color:#fff; font-size:22px; width:40px; height:40px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .2s; }
+.shop-lightbox .lb-close:hover { background:rgba(255,255,255,0.3); }
+.shop-lightbox .lb-title { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); color:#fff; font-size:14px; font-weight:600; background:rgba(0,0,0,0.5); padding:6px 18px; border-radius:20px; white-space:nowrap; }
+.stat-card { cursor:pointer; transition:transform .15s,box-shadow .15s; }
+.stat-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,.1); }
+</style>
+@endpush
 <div class="content-inner container-fluid pb-0">
     <div class="d-flex align-items-center mb-4 gap-3">
         <a href="{{ route('admin.vendors.index') }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left"></i></a>
@@ -14,17 +27,28 @@
         {{-- Stats --}}
         <div class="col-12">
             <div class="row row-cols-2 row-cols-md-5 g-3">
-                @foreach([
+                @php
+                $statsList = [
                     ['label'=>'Total Orders','value'=>$stats['total_orders'],'color'=>'primary'],
                     ['label'=>'Revenue','value'=>'₹'.number_format($stats['total_revenue'],0),'color'=>'success'],
                     ['label'=>'Today Orders','value'=>$stats['today_orders'],'color'=>'info'],
                     ['label'=>'Pending','value'=>$stats['pending_orders'],'color'=>'warning'],
-                    ['label'=>'Total Items','value'=>$stats['total_items'],'color'=>'secondary'],
-                ] as $s)
-                <div class="col"><div class="card border-0 shadow-sm text-center"><div class="card-body py-2">
-                    <h5 class="mb-0 fw-bold text-{{ $s['color'] }}">{{ $s['value'] }}</h5>
-                    <small class="text-muted">{{ $s['label'] }}</small>
-                </div></div></div>
+                    ['label'=>'Total Items','value'=>$stats['total_items'],'color'=>'secondary','click'=>'shopItemsModal'],
+                ];
+                @endphp
+                @foreach($statsList as $s)
+                <div class="col">
+                    @if(isset($s['click']))
+                    <div class="card border-0 shadow-sm text-center stat-card" data-bs-toggle="modal" data-bs-target="#{{ $s['click'] }}">
+                    @else
+                    <div class="card border-0 shadow-sm text-center">
+                    @endif
+                        <div class="card-body py-2">
+                            <h5 class="mb-0 fw-bold text-{{ $s['color'] }}">{{ $s['value'] }}</h5>
+                            <small class="text-muted">{{ $s['label'] }}</small>
+                        </div>
+                    </div>
+                </div>
                 @endforeach
             </div>
         </div>
@@ -74,7 +98,7 @@
                 <div class="card-body">
                     <div class="d-flex flex-wrap gap-2">
                         @forelse($vendor->images as $img)
-                        <img src="{{ asset('storage/' . $img->image_path) }}" class="rounded border" width="80" height="80" style="object-fit:cover" title="{{ $img->tag }}">
+                        <img src="{{ asset('storage/' . $img->image_path) }}" class="rounded border" width="80" height="80" style="object-fit:cover;cursor:pointer" title="{{ $img->tag }}" onclick="openShopLightbox('{{ asset('storage/' . $img->image_path) }}','{{ addslashes($img->tag ?? 'Shop Photo') }}')">
                         @empty
                         <span class="text-muted">No photos uploaded</span>
                         @endforelse
@@ -221,4 +245,91 @@ document.getElementById('orderItemsModal').addEventListener('show.bs.modal', fun
     <div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary btn-sm">Send Email</button></div>
     </form>
 </div></div></div>
+
+{{-- Shop Items Modal --}}
+<div class="modal fade" id="shopItemsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0">Items — {{ $vendor->restaurant_name }}</h5>
+                    <small class="text-muted">{{ $stats['total_items'] }} item(s)</small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Image</th>
+                                <th>Name</th>
+                                <th>Category</th>
+                                <th>Variants</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @forelse($vendor->items as $item)
+                        <tr>
+                            <td>
+                                @php $imgs = is_array($item->images) ? $item->images : json_decode($item->images??'[]',true); @endphp
+                                @php $itemImg = !empty($imgs) ? (str_starts_with($imgs[0], 'http') ? $imgs[0] : asset('storage/'.$imgs[0])) : null; @endphp
+                                @if($itemImg)<img src="{{ $itemImg }}" width="40" height="40" class="rounded" style="object-fit:cover">
+                                @else<div class="avatar avatar-40 bg-primary-subtle rounded d-flex align-items-center justify-content-center"><span style="font-size:18px">🎂</span></div>@endif
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    @if($item->is_veg)<span style="display:inline-block;width:12px;height:12px;border:1.5px solid #2D7A2D;border-radius:2px" title="Veg"><span style="display:block;margin:1.5px auto;width:6px;height:6px;border-radius:50%;background:#2D7A2D"></span></span>
+                                    @else<span style="display:inline-block;width:12px;height:12px;border:1.5px solid #D32F2F;border-radius:2px" title="Non-Veg"><span style="display:block;margin:1.5px auto;width:6px;height:6px;border-radius:50%;background:#D32F2F"></span></span>@endif
+                                    <strong>{{ $item->item_name }}</strong>
+                                </div>
+                            </td>
+                            <td>{{ $item->category?->category_name ?? '—' }}</td>
+                            <td>
+                                @foreach($item->variants->take(2) as $v)
+                                <span class="badge bg-light text-dark me-1">{{ $v->label }}: ₹{{ $v->offer_price ?: $v->price }}</span>
+                                @endforeach
+                                @if($item->variants->count() > 2)<span class="badge bg-secondary">+{{ $item->variants->count()-2 }}</span>@endif
+                            </td>
+                            <td><span class="badge bg-{{ $item->status==='active'?'success':'secondary' }}">{{ ucfirst($item->status) }}</span></td>
+                        </tr>
+                        @empty
+                        <tr><td colspan="5" class="text-center py-4 text-muted">No items found.</td></tr>
+                        @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="{{ route('admin.items.index', ['shop_id' => $vendor->shop_id]) }}" class="btn btn-sm btn-outline-primary">View All in Items Page</a>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- Shop Photo Lightbox --}}
+<div class="shop-lightbox" id="shopLightbox" onclick="closeShopLightbox(event)">
+    <button class="lb-close" onclick="closeShopLightbox(event)">&times;</button>
+    <div class="lb-content" onclick="event.stopPropagation()">
+        <img id="shopLbImage" alt="Shop Photo">
+    </div>
+    <div class="lb-title" id="shopLbTitle"></div>
+</div>
 </x-app-layout>
+
+<script>
+function openShopLightbox(url, title) {
+    var lb = document.getElementById('shopLightbox');
+    document.getElementById('shopLbImage').src = url;
+    document.getElementById('shopLbTitle').textContent = title;
+    lb.classList.add('show');
+}
+function closeShopLightbox(e) {
+    document.getElementById('shopLightbox').classList.remove('show');
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeShopLightbox(e);
+});
+</script>

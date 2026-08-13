@@ -62,12 +62,12 @@ class ProcessItemMedia implements ShouldQueue
         $ext      = strtolower(pathinfo($originalPath, PATHINFO_EXTENSION));
         $dir      = 'item_media/' . $media->item_id;
 
-        // Full-size: max 1200px wide, 85% quality
-        $fullPath = "{$dir}/{$baseName}_full.webp";
+        // Full-size: max 1200px wide, 85% quality JPEG
+        $fullPath = "{$dir}/{$baseName}_full.jpg";
         $this->resizeAndStore($disk->path($originalPath), $disk->path($fullPath), 1200, null, 85);
 
-        // Thumbnail: 400×400 centre-crop
-        $thumbPath = "{$dir}/{$baseName}_thumb.webp";
+        // Thumbnail: 400×400 centre-crop JPEG
+        $thumbPath = "{$dir}/{$baseName}_thumb.jpg";
         $this->resizeAndStore($disk->path($originalPath), $disk->path($thumbPath), 400, 400, 80, true);
 
         $media->update([
@@ -88,9 +88,13 @@ class ProcessItemMedia implements ShouldQueue
             if ($crop && $height) {
                 $img->fit($width, $height);
             } else {
-                $img->resize($width, $height, fn($c) => $c->aspectRatio()->upsize());
+                // v2: aspectRatio() and upsize() return void — do NOT chain them
+                $img->resize($width, $height, function ($c) {
+                    $c->aspectRatio();
+                    $c->upsize();
+                });
             }
-            $img->encode('webp', $quality)->save($dest);
+            $img->encode('jpg', $quality)->save($dest);
         } else {
             // Pure GD fallback
             $this->gdResize($src, $dest, $width, $height, $crop);
