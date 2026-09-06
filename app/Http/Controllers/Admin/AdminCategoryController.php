@@ -222,6 +222,20 @@ class AdminCategoryController extends Controller
         return back()->with('success','Bulk action completed.');
     }
 
+    public function reorder(Request $request)
+    {
+        $request->validate([
+            'ids'   => 'required|array',
+            'ids.*' => 'integer|exists:item_categories,id',
+        ]);
+
+        foreach ($request->ids as $index => $id) {
+            ItemCategory::where('id', $id)->update(['sort_order' => $index]);
+        }
+
+        return response()->json(['status' => true, 'message' => 'Category order updated.']);
+    }
+
     private function gstSlabs(): array
     {
         return [

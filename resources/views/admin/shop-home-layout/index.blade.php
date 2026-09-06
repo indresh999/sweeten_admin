@@ -4,17 +4,31 @@
 .shop-card {
     background:#fff; border:1.5px solid #e9ecef; border-radius:14px;
     padding:10px 12px; display:flex; align-items:center; gap:10px;
-    margin-bottom:8px; transition:box-shadow .15s;
+    margin-bottom:8px; transition:box-shadow .15s, transform .15s, opacity .15s;
+    cursor: grab;
 }
-.shop-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.09); }
+.shop-card:active { cursor: grabbing; }
+.shop-card:hover { box-shadow:0 4px 14px rgba(0,0,0,.09); transform:translateY(-1px); }
 .shop-thumb { width:46px;height:46px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1.5px solid #e9ecef; }
 .shop-thumb-placeholder { width:46px;height:46px;border-radius:10px;background:#f0fdf4;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0; }
-.drag-handle { color:#cbd5e1;cursor:grab;font-size:14px; }
-.area-zone { background:#f8f9fa;border:2px dashed #dee2e6;border-radius:14px;padding:12px;min-height:80px; }
-.area-zone.drag-over { border-color:#3b82f6;background:#eff8ff; }
+.drag-handle { color:#cbd5e1;cursor:grab;font-size:14px;transition:color .15s; }
+.shop-card:hover .drag-handle { color:#3b82f6; }
+
+/* SortableJS feedback */
+.shop-card.sortable-ghost { opacity:.35;transform:scale(.96);box-shadow:0 0 0 2px #3b82f6; }
+.shop-card.sortable-chosen { box-shadow:0 8px 25px rgba(0,0,0,.18);transform:scale(1.02);z-index:10; }
+.shop-card.sortable-drag { opacity:.9;box-shadow:0 12px 35px rgba(0,0,0,.22); }
+
+.area-zone {
+    background:#f8f9fa;border:2px dashed #dee2e6;border-radius:14px;padding:12px;min-height:80px;
+    transition:border-color .2s,background .2s;
+}
+.area-zone.sortable-over { border-color:#3b82f6;background:#eff8ff; }
 .area-label { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;margin-bottom:8px; }
 .popular-shop-card { border-left:3px solid #3b82f6; }
 .featured-shop-card { border-left:3px solid #ffd60a; }
+
+.empty-hint { pointer-events:none; }
 </style>
 @endpush
 
@@ -54,11 +68,10 @@
                             <div class="fw-semibold mb-1">All Active Shops</div>
                             <p class="text-muted small mb-3">Drag into Featured to add, or drag back to remove.</p>
                             <input type="text" class="form-control form-control-sm mb-3" id="shopSearch" placeholder="Search shops…" oninput="filterShops(this.value)">
-                            <div id="allShopsPool" class="area-zone" style="max-height:480px;overflow-y:auto"
-                                 ondragover="onDragOver(event,this)" ondragleave="onDragLeave(this)" ondrop="onDropPool(event)">
+                            <div id="allShopsPool" class="area-zone" style="max-height:480px;overflow-y:auto">
                                 @foreach($allActive as $s)
                                     @if(!$s->is_featured)
-                                    <div class="shop-card" draggable="true" data-id="{{ $s->shop_id }}"
+                                    <div class="shop-card" data-id="{{ $s->shop_id }}"
                                          data-name="{{ $s->restaurant_name }}" data-city="{{ $s->city }}">
                                         <span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>
                                         <div class="shop-thumb-placeholder">🏪</div>
@@ -85,10 +98,9 @@
                                 </button>
                             </div>
                             <p class="text-muted small mb-3">Drag to reorder. These appear in the big carousel on the home screen.</p>
-                            <div id="featuredZone" class="area-zone" style="min-height:300px"
-                                 ondragover="onDragOver(event,this)" ondragleave="onDragLeave(this)" ondrop="onDropFeatured(event)">
+                            <div id="featuredZone" class="area-zone" style="min-height:300px">
                                 @forelse($featured as $s)
-                                <div class="shop-card featured-shop-card" draggable="true" data-id="{{ $s->shop_id }}"
+                                <div class="shop-card featured-shop-card" data-id="{{ $s->shop_id }}"
                                      data-name="{{ $s->restaurant_name }}" data-city="{{ $s->city }}">
                                     <span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>
                                     @if($s->images->first())
@@ -144,11 +156,9 @@
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
                             </div>
-                            <div class="area-zone popular-zone" id="pop-zone-{{ Str::slug($area) }}"
-                                 ondragover="onDragOver(event,this)" ondragleave="onDragLeave(this)"
-                                 ondrop="onDropPopular(event,'{{ $area }}')">
+                            <div class="area-zone popular-zone" id="pop-zone-{{ Str::slug($area) }}">
                                 @foreach($shops as $s)
-                                <div class="shop-card popular-shop-card" draggable="true" data-id="{{ $s->shop_id }}"
+                                <div class="shop-card popular-shop-card" data-id="{{ $s->shop_id }}"
                                      data-name="{{ $s->restaurant_name }}" data-city="{{ $s->city }}">
                                     <span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>
                                     @if($s->images->first())
@@ -174,12 +184,10 @@
                         {{-- Hidden pool for popular tab --}}
                         <div class="col-md-4">
                             <div class="area-label text-secondary">Unassigned Shops</div>
-                            <div class="area-zone" id="pop-unassigned" style="max-height:400px;overflow-y:auto"
-                                 ondragover="onDragOver(event,this)" ondragleave="onDragLeave(this)"
-                                 ondrop="onDropUnassigned(event)">
+                            <div class="area-zone" id="pop-unassigned" style="max-height:400px;overflow-y:auto">
                                 @foreach($allActive as $s)
                                     @if(!$s->is_popular)
-                                    <div class="shop-card" draggable="true" data-id="{{ $s->shop_id }}"
+                                    <div class="shop-card" data-id="{{ $s->shop_id }}"
                                          data-name="{{ $s->restaurant_name }}" data-city="{{ $s->city }}">
                                         <span class="drag-handle"><i class="fas fa-grip-vertical"></i></span>
                                         <div class="shop-thumb-placeholder">🏪</div>
@@ -201,73 +209,69 @@
 </div>
 
 @push('scripts')
+<script src="{{ asset('vendor/sortable/Sortable.min.js') }}"></script>
 <script>
-let dragged = null;
 const CSRF = '{{ csrf_token() }}';
 const FEAT_SAVE_URL = '{{ route("admin.shop-home-layout.featured.save") }}';
 const POP_SAVE_URL  = '{{ route("admin.shop-home-layout.popular.save") }}';
 let newAreaIdx = 0;
 
-// ── Generic drag helpers ─────────────────────────────────────────────────────
+// ── Featured SortableJS ──────────────────────────────────────────────────────
 
-function setupDragListeners(card) {
-    card.setAttribute('draggable', 'true');
-    card.addEventListener('dragstart', e => {
-        dragged = card;
-        setTimeout(() => card.style.opacity = '.4', 0);
-        e.dataTransfer.effectAllowed = 'move';
-    });
-    card.addEventListener('dragend', () => {
-        if (dragged) dragged.style.opacity = '1';
-        dragged = null;
-        updateFeaturedCount();
-    });
-    card.addEventListener('dragover', e => {
-        e.preventDefault();
-        if (!dragged || dragged === card) return;
-        const zone = card.closest('.area-zone');
-        if (!zone) return;
-        const rect = card.getBoundingClientRect();
-        zone.insertBefore(dragged, e.clientY < rect.top + rect.height / 2 ? card : card.nextSibling);
-    });
-}
-document.querySelectorAll('.shop-card').forEach(setupDragListeners);
-
-function onDragOver(e, el) { e.preventDefault(); el.classList.add('drag-over'); }
-function onDragLeave(el) { el.classList.remove('drag-over'); }
-
-// ── Featured ─────────────────────────────────────────────────────────────────
-
-function onDropFeatured(e) {
-    e.preventDefault();
-    const zone = document.getElementById('featuredZone');
-    zone.classList.remove('drag-over');
-    if (!dragged) return;
-    zone.querySelectorAll('.empty-hint').forEach(n => n.remove());
-    // Add remove button if coming from pool
-    if (!dragged.querySelector('.fa-times')) {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-link text-danger p-0';
-        btn.title = 'Remove';
-        btn.innerHTML = '<i class="fas fa-times"></i>';
-        btn.onclick = function() { removeFromFeatured(this); };
-        dragged.appendChild(btn);
-    }
-    dragged.classList.add('featured-shop-card');
-    zone.appendChild(dragged);
-    updateFeaturedCount();
-}
-
-function onDropPool(e) {
-    e.preventDefault();
+function initFeaturedSortables() {
     const pool = document.getElementById('allShopsPool');
-    pool.classList.remove('drag-over');
-    if (!dragged) return;
-    // Remove the ×  button
-    dragged.querySelectorAll('button').forEach(b => b.remove());
-    dragged.classList.remove('featured-shop-card');
-    pool.appendChild(dragged);
-    updateFeaturedCount();
+    const featured = document.getElementById('featuredZone');
+
+    if (pool && !pool._sortable) {
+        pool._sortable = Sortable.create(pool, {
+            group: { name: 'featured-shops', pull: false, put: true },
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            handle: '.drag-handle',
+            fallbackTolerance: 3,
+            onAdd: (evt) => {
+                const card = evt.item;
+                // Remove × button when moving back to pool
+                card.querySelectorAll('button').forEach(b => b.remove());
+                card.classList.remove('featured-shop-card');
+                cleanEmptyHints(pool);
+                updateFeaturedCount();
+            },
+        });
+    }
+
+    if (featured && !featured._sortable) {
+        featured._sortable = Sortable.create(featured, {
+            group: { name: 'featured-shops', pull: true, put: true },
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            handle: '.drag-handle',
+            fallbackTolerance: 3,
+            onAdd: (evt) => {
+                const card = evt.item;
+                // Add × button if coming from pool
+                if (!card.querySelector('.fa-times')) {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-link text-danger p-0';
+                    btn.title = 'Remove';
+                    btn.innerHTML = '<i class="fas fa-times"></i>';
+                    btn.onclick = function() { removeFromFeatured(this); };
+                    card.appendChild(btn);
+                }
+                card.classList.add('featured-shop-card');
+                cleanEmptyHints(featured);
+                updateFeaturedCount();
+            },
+            onRemove: () => {
+                cleanEmptyHints(featured);
+                updateFeaturedCount();
+            },
+        });
+    }
 }
 
 function removeFromFeatured(btn) {
@@ -284,9 +288,11 @@ function updateFeaturedCount() {
 }
 
 function filterShops(q) {
+    const query = q.toLowerCase();
     document.querySelectorAll('#allShopsPool .shop-card').forEach(c => {
         const name = c.dataset.name.toLowerCase();
-        c.style.display = name.includes(q.toLowerCase()) ? '' : 'none';
+        const city = c.dataset.city.toLowerCase();
+        c.style.display = (name.includes(query) || city.includes(query)) ? '' : 'none';
     });
 }
 
@@ -301,7 +307,45 @@ function saveFeatured() {
     postSave(FEAT_SAVE_URL, { items });
 }
 
-// ── Popular ───────────────────────────────────────────────────────────────────
+// ── Popular SortableJS ───────────────────────────────────────────────────────
+
+function initPopularSortables() {
+    // Each popular zone and the unassigned zone share a group
+    document.querySelectorAll('.popular-zone, #pop-unassigned').forEach(zone => {
+        if (zone._sortable) return;
+        zone._sortable = Sortable.create(zone, {
+            group: { name: 'popular-shops', pull: true, put: true },
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            handle: '.drag-handle',
+            fallbackTolerance: 3,
+            onAdd: (evt) => {
+                const card = evt.item;
+                const toZone = evt.to;
+                const isUnassigned = toZone.id === 'pop-unassigned';
+
+                if (isUnassigned) {
+                    // Moving back to unassigned
+                    card.querySelectorAll('button').forEach(b => b.remove());
+                    card.classList.remove('popular-shop-card');
+                } else {
+                    // Moving to an area zone
+                    if (!card.querySelector('.fa-times')) {
+                        const btn = document.createElement('button');
+                        btn.className = 'btn btn-link text-danger p-0';
+                        btn.innerHTML = '<i class="fas fa-times"></i>';
+                        btn.onclick = function() { removeFromArea(this); };
+                        card.appendChild(btn);
+                    }
+                    card.classList.add('popular-shop-card');
+                }
+                cleanEmptyHints(toZone);
+            },
+        });
+    });
+}
 
 function addArea() {
     const input = document.getElementById('newAreaInput');
@@ -324,16 +368,37 @@ function addArea() {
                 <i class="fas fa-trash-alt"></i>
             </button>
         </div>
-        <div class="area-zone popular-zone" id="pop-zone-${slug}"
-             ondragover="onDragOver(event,this)" ondragleave="onDragLeave(this)"
-             ondrop="onDropPopular(event,'${name}')">
-            <div class="text-center text-muted py-3 empty-hint" style="font-size:12px">Drag shops here</div>
-        </div>
+        <div class="area-zone popular-zone" id="pop-zone-${slug}"></div>
     `;
+
     // Insert before the last col (unassigned)
     const cols = row.querySelectorAll('.col-md-4');
     const lastCol = cols[cols.length - 1];
     row.insertBefore(col, lastCol);
+
+    // Initialize Sortable on the new zone
+    const zone = col.querySelector('.popular-zone');
+    zone._sortable = Sortable.create(zone, {
+        group: { name: 'popular-shops', pull: true, put: true },
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        handle: '.drag-handle',
+        fallbackTolerance: 3,
+        onAdd: (evt) => {
+            const card = evt.item;
+            if (!card.querySelector('.fa-times')) {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-link text-danger p-0';
+                btn.innerHTML = '<i class="fas fa-times"></i>';
+                btn.onclick = function() { removeFromArea(this); };
+                card.appendChild(btn);
+            }
+            card.classList.add('popular-shop-card');
+            cleanEmptyHints(zone);
+        },
+    });
 }
 
 function removeArea(btn) {
@@ -345,36 +410,8 @@ function removeArea(btn) {
         c.classList.remove('popular-shop-card');
         unassigned.appendChild(c);
     });
+    if (zone._sortable) { zone._sortable.destroy(); zone._sortable = null; }
     col.remove();
-}
-
-function onDropPopular(e, areaName) {
-    e.preventDefault();
-    // Find closest zone
-    const zone = e.currentTarget;
-    zone.classList.remove('drag-over');
-    if (!dragged) return;
-    zone.querySelectorAll('.empty-hint').forEach(n => n.remove());
-    // Add remove button
-    if (!dragged.querySelector('.fa-times')) {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-link text-danger p-0';
-        btn.innerHTML = '<i class="fas fa-times"></i>';
-        btn.onclick = function() { removeFromArea(this); };
-        dragged.appendChild(btn);
-    }
-    dragged.classList.add('popular-shop-card');
-    zone.appendChild(dragged);
-}
-
-function onDropUnassigned(e) {
-    e.preventDefault();
-    const zone = document.getElementById('pop-unassigned');
-    zone.classList.remove('drag-over');
-    if (!dragged) return;
-    dragged.querySelectorAll('button').forEach(b => b.remove());
-    dragged.classList.remove('popular-shop-card');
-    zone.appendChild(dragged);
 }
 
 function removeFromArea(btn) {
@@ -400,6 +437,13 @@ function savePopular() {
 
 // ── Shared ────────────────────────────────────────────────────────────────────
 
+function cleanEmptyHints(container) {
+    if (!container) return;
+    container.querySelectorAll('.empty-hint').forEach(h => {
+        if (container.querySelectorAll('.shop-card').length > 0) h.remove();
+    });
+}
+
 function postSave(url, body) {
     fetch(url, {
         method: 'POST',
@@ -419,6 +463,10 @@ function showToast(type, msg) {
     document.getElementById('toastArea').appendChild(t);
     setTimeout(() => t.remove(), 3500);
 }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+initFeaturedSortables();
+initPopularSortables();
 </script>
 @endpush
 </x-app-layout>

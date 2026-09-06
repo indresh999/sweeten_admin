@@ -223,9 +223,9 @@ class OrderController extends Controller
                 'pincode'              => $address->pincode,
                 'lat'                  => $address->lat,
                 'lng'                  => $address->lng,
-                'expected_delivery_at' => now()->addMinutes(
-                    (int) AppSetting::get('default_delivery_minutes', 45)
-                ),
+                'expected_delivery_at' => ($minutes = AppSetting::get('default_delivery_minutes'))
+                    ? now()->addMinutes((int) $minutes)
+                    : null,
             ]);
 
             // Create order items

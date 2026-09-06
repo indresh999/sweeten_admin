@@ -321,12 +321,16 @@ class ItemController extends Controller
         $items = $query->paginate($request->integer('per_page', 30));
         $items->getCollection()->transform(fn($i) => $this->appendImageUrls($i));
 
-        // Subcategories for this category
+        // Subcategories for this category with item counts
         $subcategories = \App\Models\ItemSubcategory::where('category_id', $request->category_id)
             ->where('status', 1)
             ->orderBy('sort_order')
-            ->select('id', 'name', 'slug')
-            ->get();
+            ->select('id', 'name', 'slug', 'description', 'image', 'is_featured')
+            ->withCount(['items' => fn($q) => $q->where('status', 'active')])
+            ->get()
+            ->map(fn($s) => array_merge($s->toArray(), [
+                'image_url' => $s->image_url,
+            ]));
 
         return response()->json([
             'status' => true,

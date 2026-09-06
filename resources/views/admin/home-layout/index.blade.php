@@ -8,6 +8,7 @@
     overflow-x: auto;
     padding-bottom: 8px;
     align-items: flex-start;
+    scroll-behavior: smooth;
 }
 .section-col {
     flex-shrink: 0;
@@ -21,7 +22,7 @@
     min-height: 160px;
     transition: border-color .2s, background .2s;
 }
-.section-col-inner.drag-over { border-color: #22c55e; background: #dcfce7; }
+.section-col-inner.sortable-over { border-color: #22c55e; background: #dcfce7; }
 
 .hidden-zone-wrap {
     background: #fafafa;
@@ -31,7 +32,7 @@
     min-height: 80px;
     transition: border-color .2s, background .2s;
 }
-.hidden-zone-wrap.drag-over { border-color: #94a3b8; background: #f1f5f9; }
+.hidden-zone-wrap.sortable-over { border-color: #94a3b8; background: #f1f5f9; }
 
 .zone-label {
     font-size: 11px;
@@ -50,7 +51,7 @@
     font-size: 10px;
 }
 
-/* Section title input — looks like text until focused */
+/* Section title input */
 .section-title-input {
     background: transparent;
     border: none;
@@ -79,33 +80,34 @@
     align-items: center;
     gap: 10px;
     cursor: grab;
-    transition: box-shadow .15s, transform .15s;
+    transition: box-shadow .15s, transform .15s, opacity .15s;
     user-select: none;
     margin-bottom: 8px;
 }
 .cat-card:active { cursor: grabbing; }
-.cat-card.dragging { opacity: .4; transform: scale(.97); }
 .cat-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.10); transform: translateY(-1px); }
 .cat-card.in-section  { border-left: 3px solid #22c55e; }
 .cat-card.hidden-card { border-left: 3px solid #d1d5db; }
 
-.cat-img {
-    width: 44px; height: 44px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid #e9ecef;
-    flex-shrink: 0;
+/* SortableJS feedback classes */
+.cat-card.sortable-ghost {
+    opacity: .35;
+    transform: scale(.96);
+    box-shadow: 0 0 0 2px #22c55e;
 }
-.cat-img-placeholder {
-    width: 44px; height: 44px;
-    border-radius: 50%;
-    background: #f1f5f9;
-    border: 2px solid #e9ecef;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-    color: #94a3b8; font-size: 18px;
+.cat-card.sortable-chosen {
+    box-shadow: 0 8px 25px rgba(0,0,0,.18);
+    transform: scale(1.02);
+    z-index: 10;
 }
-.drag-handle { color: #cbd5e1; cursor: grab; font-size: 14px; }
+.cat-card.sortable-drag {
+    opacity: .9;
+    box-shadow: 0 12px 35px rgba(0,0,0,.22);
+}
+
+/* Drag handle */
+.drag-handle { color: #cbd5e1; cursor: grab; font-size: 14px; transition: color .15s; }
+.cat-card:hover .drag-handle { color: #22c55e; }
 
 /* App preview */
 .app-preview {
@@ -115,7 +117,7 @@
 }
 .preview-section-label { font-size: 10px; color: rgba(255,255,255,.55); font-weight: 600; margin-bottom: 6px; }
 .preview-chips { display: flex; gap: 8px; overflow: hidden; }
-.preview-chip { text-align: center; flex-shrink: 0; }
+.preview-chip { text-align: center; flex-shrink: 0; transition: transform .2s; }
 .preview-chip img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,.3); display: block; margin: 0 auto 3px; }
 .preview-chip-placeholder { width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,.12); display: flex; align-items: center; justify-content: center; font-size: 16px; margin: 0 auto 3px; }
 .preview-chip-name { font-size: 9px; color: rgba(255,255,255,.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48px; }
@@ -129,6 +131,25 @@
     align-items: flex-start;
     padding-top: 8px;
 }
+
+/* Empty hint inside zones */
+.empty-hint {
+    pointer-events: none;
+    padding: 20px 0;
+}
+
+/* Unsaved changes indicator */
+.unsaved-dot {
+    width: 8px; height: 8px;
+    background: #f59e0b;
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulse-dot 1.5s infinite;
+}
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+}
 </style>
 @endpush
 
@@ -141,6 +162,7 @@
             <p class="text-muted mb-0 small">Drag categories between sections. Click section titles to rename. <strong>Save Layout</strong> to apply.</p>
         </div>
         <div class="d-flex gap-2 align-items-center">
+            <span id="unsavedBadge" class="d-none"><span class="unsaved-dot me-1"></span><span class="text-muted small">Unsaved</span></span>
             <span id="saveStatus" class="text-muted small d-none">
                 <span class="spinner-border spinner-border-sm me-1"></span>Saving…
             </span>
@@ -207,11 +229,7 @@
                             <i class="fas fa-trash-alt"></i>
                         </button>
                     </div>
-                    <div class="section-col-inner"
-                         id="zone-s_{{ $sec->id }}"
-                         ondragover="onDragOver(event,this)"
-                         ondragleave="onDragLeave(this)"
-                         ondrop="onDrop(event,'s_{{ $sec->id }}')">
+                    <div class="section-col-inner" id="zone-s_{{ $sec->id }}">
                         @forelse($sec->categories as $cat)
                             @include('admin.home-layout._card', ['cat' => $cat, 'rowClass' => 'in-section'])
                         @empty
@@ -227,6 +245,14 @@
                 @empty
                 <div class="text-muted small py-3">No sections yet. Click <strong>Add Section</strong> to create one.</div>
                 @endforelse
+
+                {{-- Add section button --}}
+                <div class="add-section-col">
+                    <button class="btn btn-outline-success btn-sm fw-bold w-100" onclick="addSection()" style="border-style:dashed">
+                        <i class="fas fa-plus d-block mb-1" style="font-size:18px"></i>
+                        <span style="font-size:11px">Add Section</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -238,12 +264,8 @@
                 <i class="fas fa-eye-slash"></i> Hidden
                 <span class="zone-count" id="count-hidden">{{ $hidden->count() }}</span>
             </div>
-            <div class="hidden-zone-wrap"
-                 id="zone-hidden"
-                 ondragover="onDragOver(event,this)"
-                 ondragleave="onDragLeave(this)"
-                 ondrop="onDrop(event,'hidden')">
-                <div class="d-flex flex-wrap gap-2">
+            <div class="hidden-zone-wrap" id="zone-hidden">
+                <div class="d-flex flex-wrap gap-2" id="hiddenFlex">
                     @forelse($hidden as $cat)
                         @include('admin.home-layout._card', ['cat' => $cat, 'rowClass' => 'hidden-card'])
                     @empty
@@ -261,84 +283,104 @@
 </div>
 
 @push('scripts')
+<script src="{{ asset('vendor/sortable/Sortable.min.js') }}"></script>
 <script>
-let dragged        = null;
 let newSectionIdx  = 0;
 const deletedSectionIds = [];
 const SAVE_URL = '{{ route("admin.home-layout.save") }}';
 const CSRF     = '{{ csrf_token() }}';
 
-// ── Drag Source ───────────────────────────────────────────────────────────────
+// ── SortableJS Setup ─────────────────────────────────────────────────────────
 
-function addDragListeners(card) {
-    card.setAttribute('draggable', 'true');
-    card.addEventListener('dragstart', e => {
-        dragged = card;
-        setTimeout(() => card.classList.add('dragging'), 0);
-        e.dataTransfer.effectAllowed = 'move';
+function initAllSortables() {
+    // Section zones (cross-group: categories can move between any section)
+    document.querySelectorAll('.section-col-inner').forEach(zone => {
+        if (zone._sortable) return;
+        zone._sortable = Sortable.create(zone, {
+            group: { name: 'sections', pull: true, put: true },
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            handle: '.drag-handle',
+            fallbackTolerance: 3,
+            onSort: () => markUnsaved(),
+            onAdd: (evt) => {
+                // Update card classes when moving between zones
+                const card = evt.item;
+                const isHidden = evt.to.id === 'hiddenFlex' || evt.to.closest('#zone-hidden');
+                card.classList.toggle('in-section', !isHidden);
+                card.classList.toggle('hidden-card', isHidden);
+                cleanEmptyHints(evt.from);
+                cleanEmptyHints(evt.to);
+                updateCounts();
+                updatePreview();
+                markUnsaved();
+            },
+            onRemove: (evt) => {
+                cleanEmptyHints(evt.from);
+                updateCounts();
+            },
+        });
     });
-    card.addEventListener('dragend', () => {
-        if (dragged) dragged.classList.remove('dragging');
-        dragged = null;
-        updatePreview();
-        updateAllCounts();
-    });
-    card.addEventListener('dragover', e => {
-        e.preventDefault();
-        if (!dragged || dragged === card) return;
-        const zone = card.closest('.section-col-inner, .hidden-zone-wrap');
-        if (!zone) return;
-        const rect = card.getBoundingClientRect();
-        zone.insertBefore(dragged, e.clientY < rect.top + rect.height / 2 ? card : card.nextSibling);
-    });
-}
 
-document.querySelectorAll('.cat-card').forEach(addDragListeners);
-
-// ── Drop Zones ────────────────────────────────────────────────────────────────
-
-function onDragOver(e, el) {
-    e.preventDefault();
-    el.classList.add('drag-over');
-}
-function onDragLeave(el) {
-    el.classList.remove('drag-over');
-}
-function onDrop(e, zoneKey) {
-    e.preventDefault();
-    if (!dragged) return;
-
-    let zone;
-    if (zoneKey === 'hidden') {
-        zone = document.getElementById('zone-hidden');
-    } else {
-        zone = document.getElementById('zone-' + zoneKey);
+    // Hidden zone — accepts from all section groups
+    const hiddenFlex = document.getElementById('hiddenFlex');
+    if (hiddenFlex && !hiddenFlex._sortable) {
+        hiddenFlex._sortable = Sortable.create(hiddenFlex, {
+            group: { name: 'sections', pull: true, put: true },
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            handle: '.drag-handle',
+            fallbackTolerance: 3,
+            onAdd: (evt) => {
+                const card = evt.item;
+                card.classList.remove('in-section');
+                card.classList.add('hidden-card');
+                cleanEmptyHints(evt.from);
+                cleanEmptyHints(evt.to);
+                updateCounts();
+                updatePreview();
+                markUnsaved();
+            },
+            onRemove: () => {
+                cleanEmptyHints(hiddenFlex);
+                updateCounts();
+            },
+        });
     }
-    if (!zone) return;
-
-    zone.classList.remove('drag-over');
-    zone.querySelectorAll('.empty-hint').forEach(n => n.remove());
-
-    if (zoneKey === 'hidden') {
-        dragged.classList.remove('in-section');
-        dragged.classList.add('hidden-card');
-        // Hidden zone uses flex-wrap, just append
-        zone.querySelector('.d-flex').appendChild(dragged);
-    } else {
-        dragged.classList.remove('hidden-card');
-        dragged.classList.add('in-section');
-        zone.appendChild(dragged);
-    }
-
-    updatePreview();
-    updateAllCounts();
 }
 
-// ── Add / Delete Section ──────────────────────────────────────────────────────
+function cleanEmptyHints(container) {
+    if (!container) return;
+    container.querySelectorAll('.empty-hint').forEach(h => {
+        // Only remove if container has actual cards
+        if (container.querySelectorAll('.cat-card').length > 0) {
+            h.remove();
+        }
+    });
+}
+
+function ensureEmptyHint(container) {
+    if (!container) return;
+    if (container.querySelectorAll('.cat-card').length === 0) {
+        // Check if hint already exists
+        if (!container.querySelector('.empty-hint')) {
+            const hint = document.createElement('div');
+            hint.className = 'text-center text-muted py-3 empty-hint';
+            hint.style.fontSize = '12px';
+            hint.innerHTML = '<i class="fas fa-arrow-down d-block mb-1 opacity-25"></i>Drag here';
+            container.appendChild(hint);
+        }
+    }
+}
+
+// ── Add / Delete Section ─────────────────────────────────────────────────────
 
 function addSection() {
     const tempId = 'new_' + (++newSectionIdx);
-
     const col = document.createElement('div');
     col.className = 'section-col';
     col.dataset.tempId   = tempId;
@@ -351,11 +393,7 @@ function addSection() {
                 <i class="fas fa-trash-alt"></i>
             </button>
         </div>
-        <div class="section-col-inner"
-             id="zone-${tempId}"
-             ondragover="onDragOver(event,this)"
-             ondragleave="onDragLeave(this)"
-             ondrop="onDrop(event,'${tempId}')">
+        <div class="section-col-inner" id="zone-${tempId}">
             <div class="text-center text-muted py-3 empty-hint" style="font-size:12px">
                 <i class="fas fa-arrow-down d-block mb-1 opacity-25"></i>Drag here
             </div>
@@ -364,10 +402,42 @@ function addSection() {
             <span class="zone-count-label" id="count-${tempId}">0</span> categories
         </div>
     `;
-    document.getElementById('sectionsRow').appendChild(col);
+
+    // Insert before the add-section button
+    const addBtn = document.querySelector('.add-section-col');
+    document.getElementById('sectionsRow').insertBefore(col, addBtn);
+
+    // Initialize Sortable on the new zone
+    const zone = col.querySelector('.section-col-inner');
+    zone._sortable = Sortable.create(zone, {
+        group: { name: 'sections', pull: true, put: true },
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        handle: '.drag-handle',
+        fallbackTolerance: 3,
+        onSort: () => markUnsaved(),
+        onAdd: (evt) => {
+            const card = evt.item;
+            card.classList.remove('hidden-card');
+            card.classList.add('in-section');
+            cleanEmptyHints(evt.from);
+            cleanEmptyHints(evt.to);
+            updateCounts();
+            updatePreview();
+            markUnsaved();
+        },
+        onRemove: () => {
+            cleanEmptyHints(zone);
+            updateCounts();
+        },
+    });
+
     col.querySelector('.section-title-input').focus();
     col.querySelector('.section-title-input').select();
     updatePreview();
+    markUnsaved();
 }
 
 function deleteSection(btn) {
@@ -378,7 +448,7 @@ function deleteSection(btn) {
 
     // Move all cards to hidden
     if (cards.length) {
-        const hiddenFlex = document.querySelector('#zone-hidden .d-flex');
+        const hiddenFlex = document.getElementById('hiddenFlex');
         cards.forEach(c => {
             c.classList.remove('in-section');
             c.classList.add('hidden-card');
@@ -387,14 +457,19 @@ function deleteSection(btn) {
     }
 
     if (serverId) deletedSectionIds.push(parseInt(serverId));
+
+    // Destroy sortable instance before removing
+    if (zone._sortable) { zone._sortable.destroy(); zone._sortable = null; }
+
     col.remove();
+    updateCounts();
     updatePreview();
-    updateAllCounts();
+    markUnsaved();
 }
 
 // ── Counts ────────────────────────────────────────────────────────────────────
 
-function updateAllCounts() {
+function updateCounts() {
     document.querySelectorAll('.section-col').forEach(col => {
         const tempId = col.dataset.tempId;
         const zone   = document.getElementById('zone-' + tempId);
@@ -403,7 +478,8 @@ function updateAllCounts() {
         if (el) el.textContent = count;
     });
 
-    const hiddenCount = document.querySelectorAll('#zone-hidden .cat-card').length;
+    const hiddenFlex = document.getElementById('hiddenFlex');
+    const hiddenCount = hiddenFlex ? hiddenFlex.querySelectorAll('.cat-card').length : 0;
     const hiddenEl = document.getElementById('count-hidden');
     if (hiddenEl) hiddenEl.textContent = hiddenCount;
 }
@@ -456,8 +532,17 @@ function updatePreview() {
 
 // Live preview update on title change
 document.getElementById('sectionsRow').addEventListener('input', e => {
-    if (e.target.classList.contains('section-title-input')) updatePreview();
+    if (e.target.classList.contains('section-title-input')) {
+        updatePreview();
+        markUnsaved();
+    }
 });
+
+// ── Unsaved indicator ────────────────────────────────────────────────────────
+
+function markUnsaved() {
+    document.getElementById('unsavedBadge')?.classList.remove('d-none');
+}
 
 // ── Save ──────────────────────────────────────────────────────────────────────
 
@@ -490,7 +575,7 @@ function saveLayout() {
         }
     });
 
-    document.querySelectorAll('#zone-hidden .cat-card').forEach(card => {
+    document.querySelectorAll('#hiddenFlex .cat-card').forEach(card => {
         categories.push({ id: parseInt(card.dataset.id), section_temp_id: null, sort_order: 0 });
     });
 
@@ -505,8 +590,7 @@ function saveLayout() {
     .then(r => r.json())
     .then(res => {
         if (res.status) {
-            // After save, update server IDs if new sections were created
-            // (requires page reload for true sync — toast + reload)
+            document.getElementById('unsavedBadge')?.classList.add('d-none');
             showToast('success', res.message || 'Saved!');
             setTimeout(() => location.reload(), 1200);
         } else {
@@ -529,9 +613,10 @@ function showToast(type, msg) {
     setTimeout(() => t.remove(), 4000);
 }
 
-// Init
+// ── Init ──────────────────────────────────────────────────────────────────────
+initAllSortables();
 updatePreview();
-updateAllCounts();
+updateCounts();
 </script>
 @endpush
 </x-app-layout>

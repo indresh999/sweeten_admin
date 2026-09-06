@@ -27,6 +27,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::delete('/{id}',       [AdminCategoryController::class,'destroy'])  ->name('destroy');
         Route::post('/{id}/toggle',  [AdminCategoryController::class,'toggle'])   ->name('toggle');
         Route::post('/bulk',         [AdminCategoryController::class,'bulkAction'])->name('bulk');
+        Route::post('/reorder',      [AdminCategoryController::class,'reorder'])  ->name('reorder');
         Route::get('/ajax/search',   [AdminCategoryController::class,'ajaxSearch'])->name('ajax.search');
         Route::get('/{id}/subcategories',[AdminCategoryController::class,'getSubcategories'])->name('subcategories');
     });

@@ -1,4 +1,19 @@
 <x-app-layout :assets="$assets ?? []">
+@push('styles')
+<style>
+.cat-table-row { transition: background .15s, box-shadow .15s; }
+.cat-table-row:hover { background: #f8fffe; }
+.cat-table-row.sortable-ghost { background: #dcfce7; opacity: .5; }
+.cat-table-row.sortable-chosen { box-shadow: 0 4px 16px rgba(0,0,0,.12); background: #f0fdf4; }
+.cat-drag-handle { cursor: grab; color: #cbd5e1; font-size: 14px; transition: color .15s; }
+.cat-drag-handle:hover { color: #22c55e; }
+.cat-drag-handle:active { cursor: grabbing; }
+#saveOrderBtn { transition: all .2s; }
+.unsaved-dot { width:8px;height:8px;background:#f59e0b;border-radius:50%;display:inline-block;animation:pulse-dot 1.5s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+</style>
+@endpush
+
 <div class="content-inner container-fluid pb-0">
 
     {{-- Header --}}
@@ -7,9 +22,15 @@
             <h4 class="fw-bold mb-0">Categories</h4>
             <p class="text-muted mb-0 small">{{ $categories->total() }} total categories</p>
         </div>
-        <a href="{{ route('admin.categories.create') }}" class="btn btn-sm btn-primary">
-            <i class="fas fa-plus me-1"></i>Add Category
-        </a>
+        <div class="d-flex gap-2 align-items-center">
+            <span id="unsavedBadge" class="d-none"><span class="unsaved-dot me-1"></span><span class="text-muted small">Order changed</span></span>
+            <button id="saveOrderBtn" class="btn btn-sm btn-success fw-bold d-none" onclick="saveOrder()">
+                <i class="fas fa-save me-1"></i>Save Order
+            </button>
+            <a href="{{ route('admin.categories.create') }}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus me-1"></i>Add Category
+            </a>
+        </div>
     </div>
 
     @if(session('success'))
@@ -90,12 +111,16 @@
                         <option value="delete">Delete Selected</option>
                     </select>
                     <button type="button" class="btn btn-sm btn-outline-secondary" onclick="bulkApply()">Apply</button>
-                    <span class="ms-auto small text-muted">{{ $categories->total() }} total</span>
+                    <span class="ms-auto small text-muted">
+                        <i class="fas fa-grip-vertical me-1 text-muted" style="font-size:11px" title="Drag rows to reorder"></i>
+                        {{ $categories->total() }} total
+                    </span>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
+                                <th width="30"></th>
                                 <th width="36"><input type="checkbox" class="form-check-input" id="checkAll"></th>
                                 <th>Category</th>
                                 <th>Type</th>
@@ -107,10 +132,11 @@
                                 <th class="text-end">Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="categoriesTableBody">
                         @forelse($categories as $cat)
                         @php $tax = $cat->effective_tax; @endphp
-                        <tr>
+                        <tr class="cat-table-row" data-id="{{ $cat->id }}">
+                            <td><span class="cat-drag-handle"><i class="fas fa-grip-vertical"></i></span></td>
                             <td><input type="checkbox" name="ids[]" value="{{ $cat->id }}" class="form-check-input row-check"></td>
                             <td>
                                 <div class="d-flex align-items-center gap-2">
@@ -279,13 +305,75 @@
 </div>
 
 @push('scripts')
+<script src="{{ asset('vendor/sortable/Sortable.min.js') }}"></script>
 <script>
-// Check All checkbox
+const CSRF = '{{ csrf_token() }}';
+const REORDER_URL = '{{ route("admin.categories.reorder") }}';
+let originalOrder = [];
+
+// ── SortableJS for table rows ────────────────────────────────────────────────
+
+const tbody = document.getElementById('categoriesTableBody');
+if (tbody) {
+    const sortable = Sortable.create(tbody, {
+        animation: 150,
+        handle: '.cat-drag-handle',
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        fallbackTolerance: 3,
+        onSort: () => {
+            document.getElementById('unsavedBadge')?.classList.remove('d-none');
+            document.getElementById('saveOrderBtn')?.classList.remove('d-none');
+        },
+    });
+
+    // Store original order for comparison
+    originalOrder = [...tbody.querySelectorAll('.cat-table-row')].map(r => parseInt(r.dataset.id));
+}
+
+// ── Save Order ───────────────────────────────────────────────────────────────
+
+function saveOrder() {
+    const tbody = document.getElementById('categoriesTableBody');
+    if (!tbody) return;
+
+    const ids = [...tbody.querySelectorAll('.cat-table-row')].map(r => parseInt(r.dataset.id));
+
+    const btn = document.getElementById('saveOrderBtn');
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+    btn.disabled = true;
+
+    fetch(REORDER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
+        body: JSON.stringify({ ids }),
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.status) {
+            document.getElementById('unsavedBadge')?.classList.add('d-none');
+            btn.classList.add('d-none');
+            showToast('success', res.message || 'Order saved!');
+        } else {
+            showToast('danger', res.message || 'Error saving order.');
+        }
+    })
+    .catch(() => showToast('danger', 'Network error. Please try again.'))
+    .finally(() => {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+    });
+}
+
+// ── Check All checkbox ───────────────────────────────────────────────────────
+
 document.getElementById('checkAll')?.addEventListener('change', function() {
     document.querySelectorAll('.row-check').forEach(cb => cb.checked = this.checked);
 });
 
-// SweetAlert Delete Confirmation
+// ── SweetAlert Delete Confirmation ───────────────────────────────────────────
+
 function confirmDelete(url, name) {
     Swal.fire({
         title: 'Delete Category?',
@@ -303,7 +391,6 @@ function confirmDelete(url, name) {
         buttonsStyling: false
     }).then((result) => {
         if (result.isConfirmed) {
-            // Create and submit form
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = url;
@@ -314,7 +401,8 @@ function confirmDelete(url, name) {
     });
 }
 
-// Bulk Apply with confirmation
+// ── Bulk Apply ───────────────────────────────────────────────────────────────
+
 function bulkApply() {
     const form = document.getElementById('bulkForm');
     const action = form.querySelector('select[name="action"]').value;
@@ -366,6 +454,17 @@ function bulkApplyMobile() {
     }).then((result) => {
         if (result.isConfirmed) form.submit();
     });
+}
+
+// ── Toast ────────────────────────────────────────────────────────────────────
+
+function showToast(type, msg) {
+    const t = document.createElement('div');
+    t.className = `alert alert-${type} alert-dismissible fade show shadow`;
+    t.style.cssText = 'border-radius:12px;font-size:13px;font-weight:600;position:fixed;top:20px;right:20px;z-index:9999;min-width:260px;';
+    t.innerHTML = `${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
 }
 </script>
 @endpush
